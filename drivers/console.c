@@ -1,0 +1,253 @@
+#include "console.h"
+#include "screen.h"
+
+static console_t console;
+
+void console_init(void) {
+    console.x = 0;
+    console.y = 0;
+    console.max_x = 1920 / 8;
+    console.max_y = 1080 / 16;
+    console.color = 0x00FFFFFF;
+    console.bg_color = 0x00000000;
+    console_clear();
+    //logger_log(OK, "Console initialized");
+}
+
+void console_clear(void) {
+    fill_screen(console.bg_color);
+    console.x = 0;
+    console.y = 0;
+}
+
+static void clear_char_at(uint32_t x, uint32_t y) {
+    draw_rect(x * 8, y * 16, 8, 16, console.bg_color);
+}
+
+void console_putchar(char c) {
+    if (c == '\n') {
+        console.x = 0;
+        console.y++;
+    } else if (c == '\r') {
+        console.x = 0;
+    } else if (c == '\t') {
+        console.x = (console.x + 4) & ~3;
+    } else if (c == '\b') {
+        if (console.x > 0) {
+            console.x--;
+            clear_char_at(console.x, console.y);
+        } else if (console.y > 0) {
+            console.y--;
+            console.x = console.max_x - 1;
+            clear_char_at(console.x, console.y);
+        }
+    } else {
+        draw_char(console.x * 8, console.y * 16, c, console.color);
+        console.x++;
+    }
+    
+    if (console.x >= console.max_x) {
+        console.x = 0;
+        console.y++;
+    }
+    
+    if (console.y >= console.max_y) {
+        console_scroll();
+    }
+}
+
+void console_puts(const char* str) {
+    while (*str) {
+        console_putchar(*str);
+        str++;
+    }
+}
+
+void console_set_color(uint32_t fg, uint32_t bg) {
+    console.color = fg;
+    console.bg_color = bg;
+}
+
+void console_set_cursor(uint32_t x, uint32_t y) {
+    console.x = x;
+    console.y = y;
+}
+
+void console_scroll(void) {
+    screen_scroll(console.bg_color);
+    console.y = console.max_y - 1;
+    console.x = 0;
+}
+
+uint32_t console_get_cursor_x(void) {
+    return console.x;
+}
+
+uint32_t console_get_cursor_y(void) {
+    return console.y;
+}
+
+static void print_int(int num, int base) {
+    char digits[] = "0123456789ABCDEF";
+    char buffer[32];
+    int i = 0;
+    int negative = 0;
+    unsigned int n = num;
+
+    if (num < 0 && base == 10) {
+        negative = 1;
+        n = -num;
+    }
+    
+    if (n == 0) {
+        console_putchar('0');
+        return;
+    }
+    
+    while (n > 0) {
+        buffer[i++] = digits[n % base];
+        n /= base;
+    }
+    
+    if (negative) {
+        console_putchar('-');
+    }
+    
+    while (i > 0) {
+        console_putchar(buffer[--i]);
+    }
+}
+
+static void console_print_padded_string(const char* str, int width, char pad) {
+    int len = 0;
+    const char* s = str;
+    while (*s++) len++;
+    for (int i = 0; i < width - len; i++) console_putchar(pad);
+    console_puts(str);
+}
+static void console_print_uint(unsigned int num, int base, int width, char pad) {
+    const char* digits = "0123456789ABCDEF";
+    char buffer[32];
+    int i = 0;
+
+    if (num == 0) {
+        buffer[i++] = '0';
+    } else {
+        while (num > 0) {
+            buffer[i++] = digits[num % base];
+            num /= base;
+        }
+    }
+
+    // padding
+    while (i < width) {
+        console_putchar(pad);
+        width--;
+    }
+
+    while (i > 0) {
+        console_putchar(buffer[--i]);
+    }
+}
+
+static void console_print_padded_int(int value, int width) {
+    char buffer[32];
+    int i = 0;
+    int n = value;
+    if (value == 0) buffer[i++] = '0';
+    while (n > 0) {
+        buffer[i++] = '0' + (n % 10);
+        n /= 10;
+    }
+    // reverse
+    for (int j = i; j < width; j++) console_putchar(' ');
+    while (i > 0) console_putchar(buffer[--i]);
+}
+
+void console_vprintf(const char* format, va_list args) {
+    while (*format) {
+        if (*format == '%') {
+            format++;
+            int width = 0;
+            char pad = ' ';
+
+            if (*format == '0') {
+                pad = '0';
+                format++;
+            }
+
+            while (*format >= '0' && *format <= '9') {
+                width = width * 10 + (*format - '0');
+                format++;
+            }
+
+            switch (*format) {
+                case 'd':
+                    console_print_uint((unsigned int)va_arg(args, int), 10, width, pad);
+                    break;
+                case 'x':
+                case 'X':
+                    console_print_uint(va_arg(args, unsigned int), 16, width, pad);
+                    break;
+                case 's':
+                    console_print_padded_string(va_arg(args, char*), width, pad);
+                    break;
+                case 'c':
+                    console_putchar(va_arg(args, int));
+                    break;
+                case '%':
+                    console_putchar('%');
+                    break;
+                default:
+                    console_putchar('%');
+                    console_putchar(*format);
+                    break;
+            }
+        } else {
+            console_putchar(*format);
+        }
+        format++;
+    }
+}
+
+void console_print_kv(const char* key, const char* value, int key_width, int value_width) {
+    int i;
+    for (i = 0; key[i] && i < key_width; i++) console_putchar(key[i]);
+    for (; i < key_width; i++) console_putchar(' ');
+
+    console_putchar(':');
+    console_putchar(' ');
+
+    for (i = 0; value[i] && i < value_width; i++) console_putchar(value[i]);
+    for (; i < value_width; i++) console_putchar(' ');
+
+    console_putchar('\n');
+}
+
+void console_print_kv_int(const char* key, int value, int key_width, int value_width) {
+    char buffer[32];
+    int i = 0;
+    int n = value;
+    if (n == 0) buffer[i++] = '0';
+    else {
+        while (n > 0) {
+            buffer[i++] = '0' + (n % 10);
+            n /= 10;
+        }
+    }
+
+    char str[32];
+    int j = 0;
+    while (i > 0) str[j++] = buffer[--i];
+    str[j] = '\0';
+
+    console_print_kv(key, str, key_width, value_width);
+}
+
+
+void console_printf(const char* format, ...) {
+    va_list args;
+    va_start(args, format);
+    console_vprintf(format, args);
+    va_end(args);
+}
