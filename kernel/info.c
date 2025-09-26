@@ -9,7 +9,7 @@ static void get_cpuid(unsigned int eax_in, unsigned int* eax_out, unsigned int* 
 
 void get_system_info(system_info_t* info) {
     strcpy(info->os_name, "RubyOS");
-    strcpy(info->version, "1.0.0");
+    strcpy(info->version, "1.0.2");
     strcpy(info->architecture, "x86_64");
 
     unsigned int eax, ebx, ecx, edx;
