@@ -55,4 +55,11 @@ typedef struct multiboot_info {
     };
 } __attribute__((packed)) multiboot_info_t;
 
+typedef struct {
+    uint32_t size;
+    uint64_t addr;
+    uint64_t len;
+    uint32_t type;
+} __attribute__((packed)) multiboot_memory_map_t;
+
 #endif

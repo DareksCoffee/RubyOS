@@ -42,4 +42,8 @@ void get_system_info(system_info_t* info) {
 
     // Get number of logical processors
     info->cpu_threads = (ebx >> 16) & 0xFF; // bits 16-23
+
+    // Get and convert memory size
+    uint64_t bytes = get_total_memory();
+    info->total_ram = bytes >> 20; // Convert bytes to MB (divide by 1024*1024)
 }

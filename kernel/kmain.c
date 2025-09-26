@@ -7,11 +7,17 @@
 #include <logger.h>
 #include <stdio.h>
 #include <stdint.h>
+
 #include <../drivers/keyboard/keyboard.h>
+#include <../drivers/mouse/mouse.h>
+#include <../drivers/usb/hid/keyboard.h>
 #include <../user/shell/shell.h>
 #include <../drivers/time/pit.h>
 #include <../cpu/syscall_handler.h>
 #include <../libc/syscall.h>
+#include <../drivers/usb/usb.h>
+#include <../drivers/ata.h>
+#include "memory.h"
 
 static void timer_callback(registers_t* regs __attribute__((unused))) {
     /*
@@ -23,6 +29,21 @@ void kmain(multiboot_info_t* mbd, unsigned int magic __attribute__((unused))) {
     init_screen(mbd);
     init_graphics();
     cmd_init();
+
+    log(LOG_SYSTEM, "Initializing memory management...");
+    init_memory_manager(mbd);
+    log(LOG_OK, "Memory management initialized");
+
+    log(LOG_SYSTEM, "Detecting system memory...");
+    detect_memory(mbd);
+    print_memory_map();
+    printf("\n");
+
+    log(LOG_SYSTEM, "Total usable memory: %lld bytes", get_total_memory());
+
+    log(LOG_SYSTEM, "Initializing ATA...");
+    ata_init();
+    log(LOG_OK, "ATA initialized");
     
     log(LOG_SYSTEM, "Initializing GDT...");
     init_gdt();
@@ -49,13 +70,17 @@ void kmain(multiboot_info_t* mbd, unsigned int magic __attribute__((unused))) {
     
     log(LOG_SYSTEM, "Enabling interrupts...");
     __asm__ __volatile__ ("sti");
-    
+    log(LOG_SYSTEM, "Initializing USB...");
+    init_usb();
+  
     log(LOG_SYSTEM, "Initializing keyboard...");
     init_keyboard();
-    
+
+    log(LOG_SYSTEM, "Initializing mouse...");
+    init_mouse();
+
     log(LOG_SYSTEM, "Initializing shell...");
     init_shell();
-    keyboard_set_callback(shell_handle_input);
 
 
     

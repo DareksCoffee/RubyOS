@@ -150,6 +150,33 @@ static void console_print_uint(unsigned int num, int base, int width, char pad) 
     }
 }
 
+static void console_print_ulonglong(unsigned long long num, int base, int width, char pad) {
+    const char* digits = "0123456789ABCDEF";
+    char buffer[64];
+    int i = 0;
+
+    if (num == 0) {
+        buffer[i++] = '0';
+    } else {
+        unsigned long long n = num;
+        while (n != 0) {
+            unsigned long long digit = n;
+            n = n / base;
+            digit = digit - (n * base);
+            buffer[i++] = digits[digit];
+        }
+    }
+
+    while (i < width) {
+        console_putchar(pad);
+        width--;
+    }
+
+    while (i > 0) {
+        console_putchar(buffer[--i]);
+    }
+}
+
 static void console_print_padded_int(int value, int width) {
     char buffer[32];
     int i = 0;
@@ -169,7 +196,9 @@ void console_vprintf(const char* format, va_list args) {
         if (*format == '%') {
             format++;
             int width = 0;
+            int precision = -1;
             char pad = ' ';
+            int is_longlong = 0;
 
             if (*format == '0') {
                 pad = '0';
@@ -181,7 +210,33 @@ void console_vprintf(const char* format, va_list args) {
                 format++;
             }
 
+            if (*format == '.') {
+                format++;
+                if (*format == '*') {
+                    precision = va_arg(args, int);
+                    format++;
+                } else {
+                    precision = 0;
+                    while (*format >= '0' && *format <= '9') {
+                        precision = precision * 10 + (*format - '0');
+                        format++;
+                    }
+                }
+            }
+
+            if (*format == 'l' && *(format + 1) == 'l') {
+                is_longlong = 1;
+                format += 2;
+            }
+
             switch (*format) {
+                case 'u':
+                    if (is_longlong) {
+                        console_print_ulonglong(va_arg(args, unsigned long long), 10, width, pad);
+                    } else {
+                        console_print_uint(va_arg(args, unsigned int), 10, width, pad);
+                    }
+                    break;
                 case 'd':
                     console_print_uint((unsigned int)va_arg(args, int), 10, width, pad);
                     break;
@@ -190,7 +245,18 @@ void console_vprintf(const char* format, va_list args) {
                     console_print_uint(va_arg(args, unsigned int), 16, width, pad);
                     break;
                 case 's':
-                    console_print_padded_string(va_arg(args, char*), width, pad);
+                    {
+                        char* str = va_arg(args, char*);
+                        if (precision >= 0) {
+                            // Print with precision
+                            int len = 0;
+                            while (str[len] && len < precision) len++;
+                            for (int i = 0; i < width - len; i++) console_putchar(pad);
+                            for (int i = 0; i < len; i++) console_putchar(str[i]);
+                        } else {
+                            console_print_padded_string(str, width, pad);
+                        }
+                    }
                     break;
                 case 'c':
                     console_putchar(va_arg(args, int));
@@ -200,6 +266,10 @@ void console_vprintf(const char* format, va_list args) {
                     break;
                 default:
                     console_putchar('%');
+                    if (is_longlong) {
+                        console_putchar('l');
+                        console_putchar('l');
+                    }
                     console_putchar(*format);
                     break;
             }

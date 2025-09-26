@@ -1,6 +1,9 @@
 #ifndef __INFO_H__
 #define __INFO_H__
 
+#include <stdint.h>
+#include "memory.h"  // For get_total_memory()
+
 typedef struct {
     char os_name[32];
     char version[16];
@@ -9,8 +12,9 @@ typedef struct {
     char cpu_vendor[16];
     int cpu_cores;        
     int cpu_threads;      
-    unsigned int cpu_features; 
+    unsigned int cpu_features;
     int uptime_seconds;
+    uint64_t total_ram;  // Total RAM in GB
 } system_info_t;
 
 

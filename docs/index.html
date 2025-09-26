@@ -1,0 +1,149 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>RubyOS Documentation</title>
+    <style>
+        body { font-family: Arial, sans-serif; margin: 20px; }
+        h1, h2 { color: #333; }
+        ul { list-style-type: disc; margin-left: 20px; }
+        .feature { margin-bottom: 20px; }
+    </style>
+</head>
+<body>
+    <h1>RubyOS Operating System Documentation</h1>
+    <p>RubyOS is a custom x86 operating system kernel written in C and Assembly, featuring basic hardware support, a shell interface, and filesystem capabilities.</p>
+
+    <h2>Core Features</h2>
+
+    <div class="feature">
+        <h3>Kernel Architecture</h3>
+        <ul>
+            <li><strong>GDT (Global Descriptor Table)</strong>: Manages memory segmentation for protected mode operation</li>
+            <li><strong>IDT (Interrupt Descriptor Table)</strong>: Handles hardware and software interrupts</li>
+            <li><strong>ISR (Interrupt Service Routines)</strong>: Low-level interrupt handlers for CPU exceptions</li>
+            <li><strong>IRQ (Interrupt Request)</strong>: Hardware interrupt management</li>
+            <li><strong>Syscalls</strong>: System call interface for user-space to kernel communication</li>
+            <li><strong>Memory Management</strong>: Basic heap allocation and memory mapping</li>
+        </ul>
+    </div>
+
+    <div class="feature">
+        <h3>ATA Disk Driver</h3>
+        <ul>
+            <li>Supports ATA and ATAPI devices</li>
+            <li>Automatic disk detection and identification</li>
+            <li>Read/write sector operations</li>
+            <li>Disk caching for improved performance</li>
+            <li>Support for LBA (Logical Block Addressing) modes</li>
+        </ul>
+    </div>
+
+    <div class="feature">
+        <h3>Shell Interface</h3>
+        <ul>
+            <li>Command-line interface with prompt</li>
+            <li>Command history with arrow key navigation (up/down)</li>
+            <li>Built-in commands for system management</li>
+            <li>Filesystem navigation and operations</li>
+        </ul>
+    </div>
+
+    <div class="feature">
+        <h3>Filesystem (Rfss+)</h3>
+        <ul>
+            <li>Custom Rfss+ filesystem implementation</li>
+            <li>File and directory creation, deletion, and management</li>
+            <li>File reading and writing</li>
+            <li>Filesystem mounting and unmounting</li>
+            <li>Journaling for data integrity</li>
+            <li>Disk usage statistics</li>
+        </ul>
+    </div>
+
+    <div class="feature">
+        <h3>USB Support</h3>
+        <ul>
+            <li>UHCI (Universal Host Controller Interface) driver</li>
+            <li>USB device enumeration and management</li>
+            <li>HID (Human Interface Device) keyboard support</li>
+            <li>USB transfer protocols</li>
+        </ul>
+    </div>
+
+    <div class="feature">
+        <h3>Display and Console</h3>
+        <ul>
+            <li>VESA graphics mode support</li>
+            <li>Framebuffer management</li>
+            <li>Text console with color support</li>
+            <li>Font rendering (8x16 bitmap font)</li>
+            <li>Screen clearing and cursor management</li>
+        </ul>
+    </div>
+
+    <div class="feature">
+        <h3>Time Management</h3>
+        <ul>
+            <li>PIT (Programmable Interval Timer) for system timing</li>
+            <li>Configurable timer interrupts</li>
+        </ul>
+    </div>
+
+    <div class="feature">
+        <h3>Boot Process</h3>
+        <ul>
+            <li>Multiboot-compliant bootloader</li>
+            <li>GRUB integration</li>
+            <li>Kernel initialization sequence</li>
+            <li>Hardware detection and setup</li>
+        </ul>
+    </div>
+
+    <div class="feature">
+        <h3>Shell Commands</h3>
+        <ul>
+            <li><code>help</code>: Display available commands</li>
+            <li><code>clear</code>: Clear the screen</li>
+            <li><code>info</code>: System information</li>
+            <li><code>echo</code>: Print text</li>
+            <li><code>reboot</code>: Reboot the system</li>
+            <li><code>lsdisk</code>: List disk devices</li>
+            <li><code>mkfs.rfss</code>: Format disk with Rfss+ filesystem</li>
+            <li><code>mount</code>: Mount filesystem</li>
+            <li><code>umount</code>: Unmount filesystem</li>
+            <li><code>ls</code>: List directory contents</li>
+            <li><code>cd</code>: Change directory</li>
+            <li><code>mkdir</code>: Create directory</li>
+            <li><code>rmdir</code>: Remove directory</li>
+            <li><code>touch</code>: Create file</li>
+            <li><code>cp</code>: Copy files</li>
+            <li><code>mv</code>: Move files</li>
+            <li><code>rm</code>: Remove files</li>
+            <li><code>cat</code>: Display file contents</li>
+            <li><code>df</code>: Show disk usage</li>
+            <li><code>fsck.rfss</code>: Check filesystem</li>
+        </ul>
+    </div>
+
+    <h2>System Requirements</h2>
+    <ul>
+        <li>x86 architecture</li>
+        <li>Multiboot-compliant bootloader (GRUB)</li>
+        <li>ATA-compatible disk drives</li>
+        <li>VESA-compatible graphics card (optional)</li>
+        <li>USB host controller (optional)</li>
+    </ul>
+
+    <h2>Building and Running</h2>
+    <ol>
+        <li>Compile with <code>make</code></li>
+        <li>Create bootable ISO with <code>make</code></li>
+        <li>Run in QEMU: <code>qemu-system-x86_64 -cdrom bin/rubyos.iso</code></li>
+        <li>For disk support: <code>make run-with-disk</code></li>
+    </ol>
+
+    <p>This documentation provides an overview of RubyOS features. For detailed implementation, refer to the source code.</p>
+</body>
+</html>

@@ -8,5 +8,6 @@
 #define puts console_puts
 
 void cmd_init(void);
+int sscanf(const char* str, const char* format, ...);
 
 #endif

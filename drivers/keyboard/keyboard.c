@@ -14,16 +14,23 @@ static char buffer[KEYBOARD_BUFFER_SIZE];
 static uint32_t buffer_pos = 0;
 static uint32_t input_start = PROMPT_SIZE;
 static keyboard_layout_t current_layout = KBD_LAYOUT_US;
+static void (*input_callback)(const char* input) = NULL;
+static void (*char_callback)(char c) = NULL;
+static void (*special_callback)(uint8_t scancode) = NULL;
 
 static void keyboard_callback(registers_t* regs __attribute__((unused))) {
     uint8_t scancode = inb(0x60);
-    
+
     if (scancode == 0x2A || scancode == 0x36) {
         shift_pressed = 1;
     } else if (scancode == 0xAA || scancode == 0xB6) {
         shift_pressed = 0;
     } else if (scancode == 0x3A) {
         caps_lock = !caps_lock;
+    } else if (scancode == 0x48 || scancode == 0x50) { // up or down arrow
+        if (special_callback) {
+            special_callback(scancode);
+        }
     } else if (!(scancode & KEY_RELEASE)) {
         if (scancode < 128) {
             char c;
@@ -32,9 +39,13 @@ static void keyboard_callback(registers_t* regs __attribute__((unused))) {
             } else {
                 c = keyboard_layouts[current_layout].map[scancode];
             }
-            
+
             if (c) {
-                keyboard_input_char(c);
+                if (char_callback) {
+                    char_callback(c);
+                } else {
+                    keyboard_input_char(c);
+                }
             }
         }
     }
@@ -57,10 +68,16 @@ void keyboard_list_layouts() {
     }
 }
 
-static void (*input_callback)(const char* input) = NULL;
-
 void keyboard_set_callback(void (*callback)(const char* input)) {
     input_callback = callback;
+}
+
+void keyboard_set_char_callback(void (*callback)(char c)) {
+    char_callback = callback;
+}
+
+void keyboard_set_special_callback(void (*callback)(uint8_t scancode)) {
+    special_callback = callback;
 }
 
 void keyboard_input_char(char c) {
@@ -74,7 +91,7 @@ void keyboard_input_char(char c) {
         }
         buffer_pos = 0;
         input_start = PROMPT_SIZE;
-    } else if (buffer_pos < KEYBOARD_BUFFER_SIZE - 2) { 
+    } else if (buffer_pos < KEYBOARD_BUFFER_SIZE - 2) {
         buffer[buffer_pos++] = c;
         buffer[buffer_pos] = '\0';
         putchar(c);
@@ -105,4 +122,4 @@ void keyboard_clear_buffer() {
     input_start = PROMPT_SIZE;
 }
 
-#define PROMPT_SIZE 8  
+#define PROMPT_SIZE 8

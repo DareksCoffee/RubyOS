@@ -18,6 +18,18 @@ int strcmp(const char* s1, const char* s2) {
     return *(const unsigned char*)s1 - *(const unsigned char*)s2;
 }
 
+int strncmp(const char* s1, const char* s2, size_t n) {
+    while (n > 0 && *s1 && (*s1 == *s2)) {
+        s1++;
+        s2++;
+        n--;
+    }
+    if (n == 0) {
+        return 0;
+    }
+    return *(const unsigned char*)s1 - *(const unsigned char*)s2;
+}
+
 size_t strlen(const char* str) {
     size_t len = 0;
     while (str[len]) len++;
@@ -44,6 +56,20 @@ char* strncpy(char* dest, const char* src, size_t n) {
     for (; i < n; i++) {
         dest[i] = '\0';
     }
+    return original_dest;
+}
+
+char* strcat(char* dest, const char* src) {
+    char* original_dest = dest;
+    while (*dest) {
+        dest++;
+    }
+    while (*src) {
+        *dest = *src;
+        dest++;
+        src++;
+    }
+    *dest = '\0';
     return original_dest;
 }
 
@@ -77,4 +103,28 @@ char *strrchr(const char *s, int c) {
         return (char *)s;
     }
     return (char *)last;
+}
+
+int memcmp(const void* s1, const void* s2, size_t n) {
+    const unsigned char* p1 = (const unsigned char*)s1;
+    const unsigned char* p2 = (const unsigned char*)s2;
+    for (size_t i = 0; i < n; i++) {
+        if (p1[i] != p2[i]) {
+            return p1[i] - p2[i];
+        }
+    }
+    return 0;
+}
+
+char* strncat(char* dest, const char* src, size_t n) {
+    char* original_dest = dest;
+    while (*dest) dest++;
+    while (n > 0 && *src) {
+        *dest = *src;
+        dest++;
+        src++;
+        n--;
+    }
+    *dest = '\0';
+    return original_dest;
 }

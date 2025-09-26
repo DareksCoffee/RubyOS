@@ -8,6 +8,8 @@
 
 void init_keyboard(void);
 void keyboard_set_callback(void (*callback)(const char* input));
+void keyboard_set_char_callback(void (*callback)(char c));
+void keyboard_set_special_callback(void (*callback)(uint8_t scancode));
 char* keyboard_get_buffer(void);
 void keyboard_clear_buffer(void);
 void keyboard_handle_backspace(void);

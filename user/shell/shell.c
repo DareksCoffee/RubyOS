@@ -6,7 +6,11 @@
 #include <string.h>
 #include <field_map.h>
 #include <../drivers/keyboard/keyboard.h>
+#include "../drivers/ata.h"
 #include <../cpu/ports.h>
+#include <../fs/rfss.h>
+#include "rubyosascii.h"
+#include "../ui/desktop/desktop.h"
 
 
 static void cmd_help(const char* args);
@@ -15,7 +19,24 @@ static void cmd_vian(const char* args);
 static void cmd_info(const char* args);
 static void cmd_echo(const char* args);
 static void cmd_setkeys(const char* args);
-static void cmd_reboot(const char* args);
+static void cmd_reboot(const char* args __attribute__((unused)));
+static void cmd_memory(const char* args);
+static void cmd_mkfs_rfss(const char* args);
+static void cmd_mount(const char* args);
+static void cmd_umount(const char* args);
+static void cmd_ls(const char* args);
+static void cmd_cd(const char* args);
+static void cmd_mkdir(const char* args);
+static void cmd_rmdir(const char* args);
+static void cmd_touch(const char* args);
+static void cmd_cp(const char* args);
+static void cmd_mv(const char* args);
+static void cmd_rm(const char* args);
+static void cmd_cat(const char* args);
+static void cmd_df(const char* args);
+static void cmd_fsck_rfss(const char* args);
+static void cmd_lsdisk(const char* args);
+static void cmd_startx(const char* args);
 
 static const command_t commands[] = {
     {"help", "Display this help message", cmd_help},
@@ -25,14 +46,51 @@ static const command_t commands[] = {
     {"echo", "Repeats your input", cmd_echo},
     {"setkeys", "Set keyboard layout. Use -ls to list layouts.", cmd_setkeys},
     {"reboot", "Reboot the system.", cmd_reboot},
+    {"lsdisk", "List available disk devices", cmd_lsdisk},
+    {"mkfs.rfss", "Format disk with Rfss+ filesystem", cmd_mkfs_rfss},
+    {"mount", "Mount Rfss+ filesystem", cmd_mount},
+    {"umount", "Unmount Rfss+ filesystem", cmd_umount},
+    {"ls", "List directory contents", cmd_ls},
+    {"cd", "Change directory", cmd_cd},
+    {"mkdir", "Create directory", cmd_mkdir},
+    {"rmdir", "Remove directory", cmd_rmdir},
+    {"touch", "Create empty file", cmd_touch},
+    {"cp", "Copy files", cmd_cp},
+    {"mv", "Move files", cmd_mv},
+    {"rm", "Remove files", cmd_rm},
+    {"cat", "Display file contents", cmd_cat},
+    {"df", "Show filesystem usage", cmd_df},
+    {"fsck.rfss", "Check filesystem consistency", cmd_fsck_rfss},
+    {"startx", "Start the desktop environment", cmd_startx},
     {NULL, NULL, NULL}
 };
 
 static input_callback_t input_callback = NULL;
+static char history[10][256];
+static int history_count = 0;
+static int history_index = -1;
+static char input_buffer[256];
+static int input_pos = 0;
+static int input_start_x = 0;
+
+void shell_input_char(char c);
+void shell_special_key(uint8_t scancode);
+void shell_redisplay_input(void);
+
+void shell_welcome(void)
+{
+    console_set_color(0x00FF0000, 0x00000000);
+    printf("RubyShell V%s\n", SHELL_VERSION);
+    console_set_color(0x00FFFFFF, 0x00000000);
+    printf("\"help\" to get a list of available commands.\n");
+}
 
 void init_shell(void) {
-    log(LOG_OK, "Shell initialized");
+    log(LOG_OK, "RubyShell initialized");
+    shell_welcome();
     shell_display_prompt();
+    keyboard_set_char_callback(shell_input_char);
+    keyboard_set_special_callback(shell_special_key);
 }
 
 void shell_set_input_callback(input_callback_t callback) {
@@ -66,20 +124,31 @@ void shell_handle_input(const char* input) {
 
 void shell_display_prompt(void) {
     printf("[ ");
-    console_set_color(0x00FF0000, 0x00000000);  
+    console_set_color(0x00FF0000, 0x00000000);
     printf("RubyOS");
-    console_set_color(0x00FFFFFF, 0x00000000); 
+    console_set_color(0x00FFFFFF, 0x00000000);
     printf(" ]");
-    printf(" [~]");
-    printf(" -$ ");
 
+    rfss_fs_t* fs = rfss_get_mounted_fs();
+    if (fs && fs->mounted) {
+        printf(" [%s]", fs->current_path);
+    } else {
+        printf(" [~]");
+    }
+    printf(" -$ ");
+    input_start_x = console_get_cursor_x();
 }
 
 static void cmd_help(const char* args __attribute__((unused))) {
-    printf("Available commands:\n");
+    printf("========== ");
+    console_set_color(0x00B01010, 0x00F5F5F5);
+    printf("Available commands (%u commands):", (sizeof(commands) / sizeof(commands[0])));
+    console_set_color(0x00FFFFFF, 0x00000000);
+    printf(" ==========\n");
     for (const command_t* cmd = commands; cmd->name != NULL; cmd++) {
-        printf("  %s - %s\n", cmd->name, cmd->description);
+        printf("  %s -- %s\n", cmd->name, cmd->description);
     }
+    printf(" ==========\n");
 }
 
 static void cmd_clear(const char* args __attribute__((unused))) {
@@ -97,6 +166,7 @@ static void cmd_info(const char* args) {
         {"cpu_model", FIELD_STRING, info.cpu_model},
         {"cpu_threads", FIELD_INT, &info.cpu_threads},
         {"cpu_features", FIELD_INT, &info.cpu_features},
+        {"ram_mb", FIELD_INT, &info.total_ram}
     };
 
     int count = sizeof(fields) / sizeof(fields[0]);
@@ -179,8 +249,505 @@ static void cmd_setkeys(const char* args) {
 }
 
 
-static void cmd_reboot(const char* args)
+static void cmd_reboot(const char* args __attribute__((unused)))
 {
     log(LOG_SYSTEM, "Rebooting..");
     outb(0x64, 0xFE);
+}
+
+static void cmd_mkfs_rfss(const char* args) {
+    if (!args || !*args) {
+        printf("Usage: mkfs.rfss <device> [label]\n");
+        return;
+    }
+
+    char* device_str = kmalloc(32);
+    if (!device_str) {
+        printf("Memory allocation failed\n");
+        return;
+    }
+    char* label = kmalloc(16);
+    if (!label) {
+        kfree(device_str);
+        printf("Memory allocation failed\n");
+        return;
+    }
+    memset(label, 0, 16);
+    int device_id = 0;
+
+    const char* p = args;
+    int i = 0;
+    while (*p && *p != ' ' && i < 31) {
+        device_str[i++] = *p++;
+    }
+    device_str[i] = '\0';
+    if (*p == ' ') p++;
+    i = 0;
+    while (*p && *p != ' ' && i < 15) {
+        label[i++] = *p++;
+    }
+    label[i] = '\0';
+
+    if (strcmp(device_str, "hda") == 0) {
+        device_id = 0;
+    } else {
+        printf("Unsupported device: %s\n", device_str);
+        kfree(device_str);
+        kfree(label);
+        return;
+    }
+
+    if (!ata_drive_exists(device_id)) {
+        printf("Device %s not found\n", device_str);
+        kfree(device_str);
+        kfree(label);
+        return;
+    }
+
+    printf("Formatting %s with Rfss+ filesystem...\n", device_str);
+    if (rfss_format(device_id, strlen(label) > 0 ? label : NULL) == 0) {
+        printf("Filesystem created successfully\n");
+    } else {
+        printf("Failed to create filesystem\n");
+    }
+    kfree(device_str);
+    kfree(label);
+}
+
+static void cmd_mount(const char* args) {
+    if (!args || !*args) {
+        printf("Usage: mount <device>\n");
+        return;
+    }
+
+    char* device_str = kmalloc(32);
+    if (!device_str) {
+        printf("Memory allocation failed\n");
+        return;
+    }
+    int device_id = 0;
+
+    const char* p = args;
+    int i = 0;
+    while (*p && *p != ' ' && i < 31) {
+        device_str[i++] = *p++;
+    }
+    device_str[i] = '\0';
+
+    if (strcmp(device_str, "hda") == 0) {
+        device_id = 0;
+    } else {
+        printf("Unsupported device: %s\n", device_str);
+        kfree(device_str);
+        return;
+    }
+
+    if (!ata_drive_exists(device_id)) {
+        printf("Device %s not found\n", device_str);
+        kfree(device_str);
+        return;
+    }
+
+    static rfss_fs_t filesystem;
+    if (rfss_mount(device_id, &filesystem) == 0) {
+        printf("Filesystem mounted successfully\n");
+        rfss_journal_replay(&filesystem);
+    } else {
+        printf("Failed to mount filesystem\n");
+    }
+    kfree(device_str);
+}
+
+static void cmd_umount(const char* args) {
+    rfss_fs_t* fs = rfss_get_mounted_fs();
+    if (!fs || !fs->mounted) {
+        printf("No filesystem mounted\n");
+        return;
+    }
+    
+    if (rfss_unmount(fs) == 0) {
+        printf("Filesystem unmounted successfully\n");
+    } else {
+        printf("Failed to unmount filesystem\n");
+    }
+}
+
+static void cmd_ls(const char* args) {
+    rfss_fs_t* fs = rfss_get_mounted_fs();
+    if (!fs || !fs->mounted) {
+        printf("No filesystem mounted\n");
+        return;
+    }
+    
+    rfss_dir_entry_t* entries;
+    int count;
+    
+    if (rfss_list_directory(fs, args, &entries, &count) != 0) {
+        printf("Failed to list directory\n");
+        return;
+    }
+    
+    if (count == 0) {
+        printf("\n");
+        return;
+    }
+    
+    for (int i = 0; i < count; i++) {
+        if (entries[i].name_len == 1 && entries[i].name[0] == '.') {
+            continue;
+        }
+        if (entries[i].name_len == 2 && entries[i].name[0] == '.' && entries[i].name[1] == '.') {
+            continue;
+        }
+        
+        if (entries[i].name_len > 0 && entries[i].name_len < RFSS_MAX_FILENAME) {
+            char filename[RFSS_MAX_FILENAME + 1];
+            memset(filename, 0, sizeof(filename));
+            memcpy(filename, entries[i].name, entries[i].name_len);
+            filename[entries[i].name_len] = '\0';
+            
+            int j;
+            for (j = 0; j < entries[i].name_len; j++) {
+                if (filename[j] < 32 || filename[j] > 126) {
+                    filename[j] = '?';
+                }
+            }
+            
+            printf("%s ", filename);
+        }
+    }
+    printf("\n");
+    if (entries) kfree(entries);
+    
+}
+
+static void cmd_cd(const char* args) {
+    rfss_fs_t* fs = rfss_get_mounted_fs();
+    if (!fs || !fs->mounted) {
+        printf("No filesystem mounted\n");
+        return;
+    }
+
+    char new_path[256];
+    if (!args || !*args) {
+        strcpy(new_path, "/");
+    } else if (strcmp(args, "..") == 0) {
+        if (strcmp(fs->current_path, "/") == 0) {
+            return; // already root
+        } else {
+            strcpy(new_path, fs->current_path);
+            char* last = strrchr(new_path, '/');
+            if (last == new_path) {
+                strcpy(new_path, "/");
+            } else {
+                *last = '\0';
+            }
+        }
+    } else if (args[0] == '/') {
+        strcpy(new_path, args);
+    } else {
+        strcpy(new_path, fs->current_path);
+        if (strcmp(new_path, "/") != 0) {
+            strncat(new_path, "/", sizeof(new_path) - strlen(new_path) - 1);
+        }
+        strncat(new_path, args, sizeof(new_path) - strlen(new_path) - 1);
+    }
+
+    if (rfss_change_directory(fs, new_path) != 0) {
+        printf("cd: %s: No such directory\n", args);
+    } else {
+        strcpy(fs->current_path, new_path);
+    }
+}
+
+static void cmd_mkdir(const char* args) {
+    rfss_fs_t* fs = rfss_get_mounted_fs();
+    if (!fs || !fs->mounted) {
+        printf("No filesystem mounted\n");
+        return;
+    }
+    
+    if (!args || !*args) {
+        printf("Usage: mkdir <directory>\n");
+        return;
+    }
+
+    if(rfss_create_directory(fs, args) != 0) printf("mkdir: failed to create '%s'\n", args);
+}
+
+static void cmd_rmdir(const char* args) {
+    rfss_fs_t* fs = rfss_get_mounted_fs();
+    if (!fs || !fs->mounted) {
+        printf("No filesystem mounted\n");
+        return;
+    }
+    
+    if (!args || !*args) {
+        printf("Usage: rmdir <directory>\n");
+        return;
+    }
+    
+    if (rfss_remove_directory(fs, args) != 0) printf("rmdir: failed to remove '%s'\n", args);
+    
+}
+
+static void cmd_touch(const char* args) {
+    rfss_fs_t* fs = rfss_get_mounted_fs();
+    if (!fs || !fs->mounted) {
+        printf("No filesystem mounted\n");
+        return;
+    }
+    
+    if (!args || !*args) {
+        printf("Usage: touch <file>\n");
+        return;
+    }
+    
+    if (rfss_create_file(fs, args, 0644) != 0) {
+        printf("touch: cannot create '%s'\n", args);
+    }
+}
+
+static void cmd_cp(const char* args) {
+    rfss_fs_t* fs = rfss_get_mounted_fs();
+    if (!fs || !fs->mounted) {
+        printf("No filesystem mounted\n");
+        return;
+    }
+
+    if (!args || !*args) {
+        printf("Usage: cp <source> <destination>\n");
+        return;
+    }
+
+    char* source = kmalloc(256);
+    if (!source) {
+        printf("Memory allocation failed\n");
+        return;
+    }
+    char* dest = kmalloc(256);
+    if (!dest) {
+        kfree(source);
+        printf("Memory allocation failed\n");
+        return;
+    }
+
+    const char* p = args;
+    int i = 0;
+    while (*p && *p != ' ' && i < 255) {
+        source[i++] = *p++;
+    }
+    source[i] = '\0';
+    if (*p == ' ') p++;
+    i = 0;
+    while (*p && *p != ' ' && i < 255) {
+        dest[i++] = *p++;
+    }
+    dest[i] = '\0';
+
+    if (strlen(source) == 0 || strlen(dest) == 0) {
+        printf("Usage: cp <source> <destination>\n");
+        kfree(source);
+        kfree(dest);
+        return;
+    }
+    
+    rfss_file_t src_file, dst_file;
+    if (rfss_open_file(fs, source, 0, &src_file) != 0) {
+        printf("cp: cannot open '%s'\n", source);
+        return;
+    }
+    
+    if (rfss_create_file(fs, dest, 0644) != 0) {
+        printf("cp: cannot create '%s'\n", dest);
+        rfss_close_file(&src_file);
+        return;
+    }
+    
+    if (rfss_open_file(fs, dest, 1, &dst_file) != 0) {
+        printf("cp: cannot open '%s' for writing\n", dest);
+        rfss_close_file(&src_file);
+        return;
+    }
+    
+    uint8_t buffer[1024];
+    int bytes_read;
+    while ((bytes_read = rfss_read_file(&src_file, buffer, sizeof(buffer))) > 0) {
+        if (rfss_write_file(&dst_file, buffer, bytes_read) != bytes_read) {
+            printf("cp: write error\n");
+            break;
+        }
+    }
+    
+    rfss_close_file(&src_file);
+    rfss_close_file(&dst_file);
+    kfree(source);
+    kfree(dest);
+}
+
+static void cmd_mv(const char* args) {
+    printf("mv: not implemented yet\n");
+}
+
+static void cmd_rm(const char* args) {
+    rfss_fs_t* fs = rfss_get_mounted_fs();
+    if (!fs || !fs->mounted) {
+        printf("No filesystem mounted\n");
+        return;
+    }
+    
+    if (!args || !*args) {
+        printf("Usage: rm <file>\n");
+        return;
+    }
+    
+    if (rfss_delete_file(fs, args) != 0) {
+        printf("rm: cannot remove '%s'\n", args);
+    }
+}
+
+static void cmd_cat(const char* args) {
+    rfss_fs_t* fs = rfss_get_mounted_fs();
+    if (!fs || !fs->mounted) {
+        printf("No filesystem mounted\n");
+        return;
+    }
+    
+    if (!args || !*args) {
+        printf("Usage: cat <file>\n");
+        return;
+    }
+    
+    rfss_file_t file;
+    if (rfss_open_file(fs, args, 0, &file) != 0) {
+        printf("cat: cannot open '%s'\n", args);
+        return;
+    }
+    
+    uint8_t buffer[1024];
+    int bytes_read;
+    while ((bytes_read = rfss_read_file(&file, buffer, sizeof(buffer))) > 0) {
+        for (int i = 0; i < bytes_read; i++) {
+            putchar(buffer[i]);
+        }
+    }
+    
+    rfss_close_file(&file);
+}
+
+static void cmd_df(const char* args) {
+    rfss_fs_t* fs = rfss_get_mounted_fs();
+    if (!fs || !fs->mounted) {
+        printf("No filesystem mounted\n");
+        return;
+    }
+    
+    uint32_t total_blocks, free_blocks, total_inodes, free_inodes;
+    if (rfss_get_stats(fs, &total_blocks, &free_blocks, &total_inodes, &free_inodes) != 0) {
+        printf("Failed to get filesystem statistics\n");
+        return;
+    }
+    
+    uint32_t used_blocks = total_blocks - free_blocks;
+    uint32_t used_inodes = total_inodes - free_inodes;
+    
+    printf("Filesystem statistics:\n");
+    printf("Blocks: %d total, %d used, %d free (%d%% used)\n",
+           total_blocks, used_blocks, free_blocks,
+           total_blocks > 0 ? (used_blocks * 100) / total_blocks : 0);
+    printf("Inodes: %d total, %d used, %d free (%d%% used)\n",
+           total_inodes, used_inodes, free_inodes,
+           total_inodes > 0 ? (used_inodes * 100) / total_inodes : 0);
+    printf("Block size: %d bytes\n", RFSS_BLOCK_SIZE);
+    printf("Total size: %d KB\n", (total_blocks * RFSS_BLOCK_SIZE) / 1024);
+    printf("Free space: %d KB\n", (free_blocks * RFSS_BLOCK_SIZE) / 1024);
+}
+
+static void cmd_fsck_rfss(const char* args) {
+    rfss_fs_t* fs = rfss_get_mounted_fs();
+    if (!fs || !fs->mounted) {
+        printf("No filesystem mounted\n");
+        return;
+    }
+
+    printf("Checking filesystem consistency...\n");
+    if (rfss_check_filesystem(fs) == 0) {
+        printf("Filesystem is clean\n");
+    } else {
+        printf("Filesystem has errors\n");
+    }
+}
+
+void shell_input_char(char c) {
+    if (c == '\b') {
+        if (input_pos > 0) {
+            input_pos--;
+            putchar('\b');
+            putchar(' ');
+            putchar('\b');
+        }
+    } else if (c == '\n') {
+        input_buffer[input_pos] = '\0';
+        if (input_pos > 0) {
+            if (history_count < 10) {
+                strcpy(history[history_count], input_buffer);
+                history_count++;
+            } else {
+                for (int i = 0; i < 9; i++) strcpy(history[i], history[i+1]);
+                strcpy(history[9], input_buffer);
+            }
+        }
+        history_index = -1;
+        putchar('\n');
+        shell_handle_input(input_buffer);
+        input_pos = 0;
+    } else if (input_pos < 255) {
+        input_buffer[input_pos++] = c;
+        putchar(c);
+    }
+}
+
+void shell_special_key(uint8_t scancode) {
+    if (scancode == 0x48) { // up
+        if (history_count == 0) return;
+        if (history_index == -1) {
+            history_index = history_count - 1;
+        } else if (history_index > 0) {
+            history_index--;
+        }
+        strcpy(input_buffer, history[history_index]);
+        input_pos = strlen(input_buffer);
+        shell_redisplay_input();
+    } else if (scancode == 0x50) { // down
+        if (history_index == -1) return;
+        if (history_index < history_count - 1) {
+            history_index++;
+            strcpy(input_buffer, history[history_index]);
+            input_pos = strlen(input_buffer);
+        } else {
+            history_index = -1;
+            input_pos = 0;
+            input_buffer[0] = '\0';
+        }
+        shell_redisplay_input();
+    }
+}
+
+void shell_redisplay_input() {
+    uint32_t y = console_get_cursor_y();
+    console_set_cursor(input_start_x, y);
+    for (int i = 0; i < 60; i++) putchar(' ');
+    console_set_cursor(input_start_x, y);
+    printf("%s", input_buffer);
+}
+
+static void cmd_lsdisk(const char* args __attribute__((unused))) {
+    printf("Available disk devices:\n");
+    ata_list_devices();
+}
+
+static void cmd_startx(const char* args __attribute__((unused))) {
+    init_desktop();
+    desktop_event_loop();
+    init_shell();
 }

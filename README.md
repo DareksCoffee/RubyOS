@@ -1,6 +1,6 @@
 # RubyOS
 
-**Version:** RAE-0.0.1a
+**Version:** RAE-0.0.2a
 
 A hobby operating system built from scratch with a focus on learning and exploring low-level system development.
 
@@ -8,13 +8,13 @@ A hobby operating system built from scratch with a focus on learning and explori
 
 ## Screenshot
 
-![RubyOS Screenshot](https://i.imgur.com/KmnZJ4a.png)
+![RubyOS Screenshot](https://i.imgur.com/X3uJV9S.png)
 
 ---
 
 ## Features
 
-RubyOS is a 32-bit operating system that boots into a graphical console and provides a basic interactive environment.
+RubyOS is a 32-bit operating system that boots into a graphical desktop environment and provides a basic interactive environment.
 
 ### Core Kernel
 
@@ -38,19 +38,43 @@ RubyOS is a 32-bit operating system that boots into a graphical console and prov
 *   **ATA (PATA/IDE) Driver:**
     *   A basic PIO (Programmed I/O) mode driver for ATA hard drives.
     *   Includes functionality for drive identification and reading/writing raw sectors.
+*   **USB Driver:**
+    *   Supports USB controllers (UHCI) with device enumeration and management.
+    *   Includes HID (Human Interface Device) support for keyboards and other devices.
+*   **PS/2 Mouse Driver:**
+    *   Handles mouse input with position tracking and button states.
+    *   Supports callback mechanisms for mouse events.
+*   **VESA Graphics Driver:**
+    *   Enables high-resolution graphical modes for advanced display capabilities.
+*   **Framebuffer Driver:**
+    *   Manages graphics framebuffer for rendering and display operations.
 
 ### System & Userspace
 
 *   **Interactive Shell:**
     *   A functional command-line interface that starts after boot.
-    *   Features a customizable, themed prompt.
+    *   Features a customizable, themed prompt with color support.
     *   Parses user input to execute built-in commands.
 *   **System Logger:** A kernel-level logging facility that outputs color-coded messages for different severity levels (e.g., System, OK, Error) to the console.
-*   **Minimal Standard Library (Libc):** Includes essential functions for string manipulation (`strlen`, `strcpy`, `strcmp`), memory operations (`memset`, `memcpy`), and formatted output (`printf`).
+*   **Desktop Environment:**
+    *   Graphical desktop with mouse cursor support and an event-driven interface.
+    *   Provides a basic GUI framework for user interaction.
+*   **RFSS Filesystem:**
+    *   A custom journaling filesystem (Ruby File System) with support for files, directories, symlinks, and devices.
+    *   Features extents for efficient storage, inode management, and filesystem integrity checks.
+*   **Memory Management:**
+    *   Dynamic memory allocation with kmalloc and kfree functions.
+    *   Memory map detection and statistics tracking.
+*   **System Calls:**
+    *   Basic syscall interface for kernel-user communication (e.g., reboot).
+*   **I/O Ports:**
+    *   Low-level port I/O operations for hardware interaction.
+*   **Minimal Standard Library (Libc):** Includes essential functions for string manipulation (`strlen`, `strcpy`, `strcmp`), memory operations (`memset`, `memcpy`), formatted output (`printf`), and random number generation (`srand_seed`).
 
 ---
 
-## 🛠️ Building and Running
+
+## Building and Running
 
 
 

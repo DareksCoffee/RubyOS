@@ -1,11 +1,11 @@
 ; Multiboot header
 section .multiboot
 align 4
-    dd 0x1BADB002                           ; magic number
-    dd (1 << 0) | (1 << 1) | (1 << 2)     ; flags: align modules + memory info + video mode
-    dd -(0x1BADB002 + ((1 << 0) | (1 << 1) | (1 << 2)))  ; checksum
+    dd 0x1BADB002                          
+    dd (1 << 0) | (1 << 1) | (1 << 2)    
+    dd -(0x1BADB002 + ((1 << 0) | (1 << 1) | (1 << 2)))  
     
-    ; Video mode fields (required when bit 2 is set)
+
     dd 0        ; header_addr
     dd 0        ; load_addr  
     dd 0        ; load_end_addr
