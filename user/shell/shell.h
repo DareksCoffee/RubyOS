@@ -1,7 +1,7 @@
 #ifndef SHELL_H
 #define SHELL_H
 
-#include <../kernel/memory.h>
+#include <../mm/memory.h>
 
 typedef void (*command_handler_t)(const char* args);
 typedef void (*input_callback_t)(const char* input);

@@ -1,6 +1,6 @@
 #include "ata.h"
 #include "../kernel/logger.h"
-#include "../kernel/memory.h"
+#include "../mm/memory.h"
 #include "../cpu/ports.h"
 #include <string.h>
 

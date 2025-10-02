@@ -103,6 +103,7 @@ typedef struct {
     uint32_t device_id;
     int mounted;
     int dirty;
+    int journaling_enabled;
 } rfss_fs_t;
 
 typedef struct {
@@ -148,5 +149,8 @@ int rfss_journal_clear(rfss_fs_t* fs);
 int rfss_journal_check_consistency(rfss_fs_t* fs);
 int rfss_safe_write_block(rfss_fs_t* fs, uint32_t block_num, const void* data);
 int rfss_safe_write_inode(rfss_fs_t* fs, uint32_t inode_num, rfss_inode_t* inode);
+
+int rfss_enable_journaling(rfss_fs_t* fs);
+int rfss_disable_journaling(rfss_fs_t* fs);
 
 #endif

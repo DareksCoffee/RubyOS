@@ -24,13 +24,13 @@ void log(LogLevel level, const char* format, ...) {
     }
 
     console_set_color(0x00FFFFFF, 0x00000000);
-    console_printf("[ ");
+    console_printf("[  ");
 
     console_set_color(color, 0x00000000);
     console_printf("%s", level_str);
 
     console_set_color(0x00FFFFFF, 0x00000000);
-    console_printf(" ] ");
+    console_printf("  ] ");
 
     va_list args;
     va_start(args, format);

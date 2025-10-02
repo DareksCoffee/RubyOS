@@ -2,7 +2,7 @@
 #define __INFO_H__
 
 #include <stdint.h>
-#include "memory.h"  // For get_total_memory()
+#include "../mm/memory.h"  // For get_total_memory()
 
 typedef struct {
     char os_name[32];

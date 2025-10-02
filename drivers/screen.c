@@ -1,10 +1,10 @@
 #include "screen.h"
 #define FONT8x16_IMPLEMENTATION
 #include "fonts/font8x16.h"
-static screen_t screen;
+screen_t screen;
 
 void init_screen(multiboot_info_t* mbd) {
-    if (mbd->flags & (1 << 12)) {
+    if (mbd->flags & (1 << 11)) {
         screen.framebuffer = (uint32_t*)(uintptr_t)mbd->framebuffer_addr;
         screen.width = mbd->framebuffer_width;
         screen.height = mbd->framebuffer_height;

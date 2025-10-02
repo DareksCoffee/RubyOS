@@ -27,7 +27,7 @@ static void keyboard_callback(registers_t* regs __attribute__((unused))) {
         shift_pressed = 0;
     } else if (scancode == 0x3A) {
         caps_lock = !caps_lock;
-    } else if (scancode == 0x48 || scancode == 0x50) { // up or down arrow
+    } else if (scancode == 0x01 || scancode == 0x48 || scancode == 0x50) { // ESC, up or down arrow
         if (special_callback) {
             special_callback(scancode);
         }

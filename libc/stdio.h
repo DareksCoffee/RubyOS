@@ -9,5 +9,6 @@
 
 void cmd_init(void);
 int sscanf(const char* str, const char* format, ...);
+int getchar(void);
 
 #endif

@@ -1,14 +1,20 @@
 # RubyOS
 
-**Version:** RAE-0.0.2a
+**Version:** RAE-0.0.3a
 
 A hobby operating system built from scratch with a focus on learning and exploring low-level system development.
 
 ---
 
-## Screenshot
+## Screenshots
 
-![RubyOS Screenshot](https://i.imgur.com/X3uJV9S.png)
+![RubyOS Message](https://i.imgur.com/CDotXrC.png)
+*Showcase of rsh*
+
+---
+
+![RubyOS Help](https://i.imgur.com/K69zqaT.png)
+*Showcase of the help command*
 
 ---
 
@@ -24,6 +30,7 @@ RubyOS is a 32-bit operating system that boots into a graphical desktop environm
     *   **ISRs:** Handles critical CPU exceptions (e.g., Division by Zero, General Protection Fault) to ensure system stability.
     *   **IRQs:** The Programmable Interrupt Controller (PIC) is remapped and handlers are in place for hardware interrupts.
 *   **System Timer:** The Programmable Interval Timer (PIT) is initialized to provide a consistent 100Hz system tick, laying the groundwork for future multitasking.
+*   **Multitasking:** Basic process management with scheduling, context switching, process creation, and yield functionality.
 *   **System Information:** Can retrieve and display detailed CPU information (Model, Vendor, Features, Thread Count) using the `cpuid` instruction.
 
 ### Drivers
@@ -48,6 +55,10 @@ RubyOS is a 32-bit operating system that boots into a graphical desktop environm
     *   Enables high-resolution graphical modes for advanced display capabilities.
 *   **Framebuffer Driver:**
     *   Manages graphics framebuffer for rendering and display operations.
+*   **Network Drivers:**
+    *   Ethernet Driver (RTL8139): Supports wired networking with packet transmission and reception.
+    *   Network Device Abstraction: Provides a unified interface for network devices with init, send, and poll operations.
+    *   Protocol Support: Implements ARP, DNS, ICMP, IP, and UDP protocols for network communication.
 
 ### System & Userspace
 
@@ -55,13 +66,15 @@ RubyOS is a 32-bit operating system that boots into a graphical desktop environm
     *   A functional command-line interface that starts after boot.
     *   Features a customizable, themed prompt with color support.
     *   Parses user input to execute built-in commands.
+    *   Includes a built-in text editor for editing files within the shell environment.
 *   **System Logger:** A kernel-level logging facility that outputs color-coded messages for different severity levels (e.g., System, OK, Error) to the console.
 *   **Desktop Environment:**
     *   Graphical desktop with mouse cursor support and an event-driven interface.
     *   Provides a basic GUI framework for user interaction.
-*   **RFSS Filesystem:**
-    *   A custom journaling filesystem (Ruby File System) with support for files, directories, symlinks, and devices.
+*   **RFSS+ Filesystem:**
+    *   A custom journaling filesystem (Ruby File System Signature) with support for files, directories, symlinks, and devices.
     *   Features extents for efficient storage, inode management, and filesystem integrity checks.
+    * *IMPORTANT NOTE*: RFSS+ Jounraling System is disabled by default in the latest version due to numerous issues that will be patched in future updates.
 *   **Memory Management:**
     *   Dynamic memory allocation with kmalloc and kfree functions.
     *   Memory map detection and statistics tracking.
@@ -69,7 +82,7 @@ RubyOS is a 32-bit operating system that boots into a graphical desktop environm
     *   Basic syscall interface for kernel-user communication (e.g., reboot).
 *   **I/O Ports:**
     *   Low-level port I/O operations for hardware interaction.
-*   **Minimal Standard Library (Libc):** Includes essential functions for string manipulation (`strlen`, `strcpy`, `strcmp`), memory operations (`memset`, `memcpy`), formatted output (`printf`), and random number generation (`srand_seed`).
+*   **Minimal Standard Library (Libc):** Includes essential functions for string manipulation (`strlen`, `strcpy`, `strcmp`), memory operations (`memset`, `memcpy`), formatted output (`printf`), random number generation (`srand_seed`), and MD5 hashing.
 
 ---
 
@@ -93,6 +106,17 @@ make all
 
 # 2. Run in QEMU
 make run
+```
+
+---
+
+## Testing
+
+RubyOS includes a comprehensive test suite written in Python to validate various components including the kernel, drivers, filesystem, libc, and UI.
+
+```bash
+# Run the test suite
+python tests/run_tests.py
 ```
 
 ---

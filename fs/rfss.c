@@ -1,12 +1,12 @@
 #include "rfss.h"
 #include "../drivers/ata.h"
-#include "../kernel/memory.h"
+#include "../mm/memory.h"
 #include "../kernel/logger.h"
 #include <string.h>
 
 static rfss_inode_t* rfss_get_inode(rfss_fs_t* fs, uint32_t inode_num) {
     if (!fs || inode_num == 0 || inode_num > fs->superblock->inode_count) {
-        log(LOG_ERROR, "Invalid inode number: %d", inode_num);
+        //log(LOG_ERROR, "Invalid inode number: %d", inode_num);
         return NULL;
     }
     
@@ -16,7 +16,7 @@ static rfss_inode_t* rfss_get_inode(rfss_fs_t* fs, uint32_t inode_num) {
     
     static rfss_inode_t inodes[RFSS_BLOCK_SIZE / sizeof(rfss_inode_t)];
     if (rfss_read_block(fs, fs->superblock->inode_table_block + block, inodes) != 0) {
-        log(LOG_ERROR, "Failed to read inode block %d", block);
+        //log(LOG_ERROR, "Failed to read inode block %d", block);
         return NULL;
     }
     
@@ -25,8 +25,12 @@ static rfss_inode_t* rfss_get_inode(rfss_fs_t* fs, uint32_t inode_num) {
 
 static int rfss_write_inode(rfss_fs_t* fs, uint32_t inode_num, rfss_inode_t* inode) {
     if (!fs || !inode || inode_num == 0 || inode_num > fs->superblock->inode_count) {
-        log(LOG_ERROR, "Invalid parameters for write inode");
+        //log(LOG_ERROR, "Invalid parameters for write inode");
         return -1;
+    }
+
+    if (fs->journaling_enabled) {
+        return rfss_safe_write_inode(fs, inode_num, inode);
     }
     
     uint32_t inodes_per_block = RFSS_BLOCK_SIZE / sizeof(rfss_inode_t);
@@ -35,27 +39,27 @@ static int rfss_write_inode(rfss_fs_t* fs, uint32_t inode_num, rfss_inode_t* ino
 
     static rfss_inode_t inodes[RFSS_BLOCK_SIZE / sizeof(rfss_inode_t)];
     if (rfss_read_block(fs, fs->superblock->inode_table_block + block, inodes) != 0) {
-        log(LOG_ERROR, "Failed to read inode block for writing");
+        //log(LOG_ERROR, "Failed to read inode block for writing");
         return -1;
     }
     
     memcpy(&inodes[index], inode, sizeof(rfss_inode_t));
     int result = rfss_write_block(fs, fs->superblock->inode_table_block + block, inodes);
     if (result != 0) {
-        log(LOG_ERROR, "Failed to write inode block");
+       //log(LOG_ERROR, "Failed to write inode block");
     }
     return result;
 }
 
 static uint32_t rfss_find_file_in_directory(rfss_fs_t* fs, uint32_t dir_inode, const char* name) {
     if (!fs || !name || strlen(name) == 0 || strlen(name) >= RFSS_MAX_FILENAME) {
-        log(LOG_ERROR, "Invalid filename");
+        //log(LOG_ERROR, "Invalid filename");
         return 0;
     }
     
     rfss_inode_t* inode = rfss_get_inode(fs, dir_inode);
     if (!inode || ((inode->mode >> 12) & 0xF) != RFSS_FILE_DIRECTORY) {
-        log(LOG_ERROR, "Not a directory inode: %d", dir_inode);
+        //log(LOG_ERROR, "Not a directory inode: %d", dir_inode);
         return 0;
     }
 
@@ -89,7 +93,7 @@ static uint32_t rfss_find_file_in_directory(rfss_fs_t* fs, uint32_t dir_inode, c
 
 static uint32_t rfss_resolve_path(rfss_fs_t* fs, const char* path) {
     if (!fs || !path) {
-        log(LOG_ERROR, "Invalid parameters for path resolution");
+        //log(LOG_ERROR, "Invalid parameters for path resolution");
         return 0;
     }
     
@@ -119,7 +123,7 @@ static uint32_t rfss_resolve_path(rfss_fs_t* fs, const char* path) {
         
         current_inode = rfss_find_file_in_directory(fs, current_inode, component);
         if (current_inode == 0) {
-            log(LOG_ERROR, "Path component not found: %s", component);
+            //log(LOG_ERROR, "Path component not found: %s", component);
             return 0;
         }
     }
@@ -129,13 +133,13 @@ static uint32_t rfss_resolve_path(rfss_fs_t* fs, const char* path) {
 
 static int rfss_add_directory_entry(rfss_fs_t* fs, uint32_t dir_inode, const char* name, uint32_t file_inode, uint8_t file_type) {
     if (!fs || !name || strlen(name) == 0 || strlen(name) >= RFSS_MAX_FILENAME || file_inode == 0) {
-        log(LOG_ERROR, "Invalid parameters for add directory entry");
+        //log(LOG_ERROR, "Invalid parameters for add directory entry");
         return -1;
     }
     
     rfss_inode_t* inode = rfss_get_inode(fs, dir_inode);
     if (!inode || ((inode->mode >> 12) & 0xF) != RFSS_FILE_DIRECTORY) {
-        log(LOG_ERROR, "Not a directory for adding entry");
+        //log(LOG_ERROR, "Not a directory for adding entry");
         return -1;
     }
     
@@ -144,7 +148,7 @@ static int rfss_add_directory_entry(rfss_fs_t* fs, uint32_t dir_inode, const cha
     entry_size = (entry_size + 3) & ~3;
     
     if (entry_size > RFSS_BLOCK_SIZE - sizeof(rfss_dir_entry_t)) {
-        log(LOG_ERROR, "Filename too long");
+        //log(LOG_ERROR, "Filename too long");
         return -1;
     }
     
@@ -192,7 +196,7 @@ static int rfss_add_directory_entry(rfss_fs_t* fs, uint32_t dir_inode, const cha
                     //log(LOG_DEBUG, "Added directory entry '%s' to existing block", name);
                     return 0;
                 } else {
-                    log(LOG_ERROR, "Failed to write directory block");
+                    //log(LOG_ERROR, "Failed to write directory block");
                     return -1;
                 }
             }
@@ -203,7 +207,7 @@ static int rfss_add_directory_entry(rfss_fs_t* fs, uint32_t dir_inode, const cha
         if (inode->direct_blocks[i] == 0) {
             uint32_t new_block = rfss_allocate_block(fs);
             if (new_block == 0) {
-                log(LOG_ERROR, "Failed to allocate block for directory");
+                //log(LOG_ERROR, "Failed to allocate block for directory");
                 return -1;
             }
             
@@ -222,13 +226,13 @@ static int rfss_add_directory_entry(rfss_fs_t* fs, uint32_t dir_inode, const cha
             memset(new_entry->name + name_len, 0, RFSS_MAX_FILENAME - name_len);
             
             if (rfss_write_block(fs, new_block, block_buffer) != 0) {
-                log(LOG_ERROR, "Failed to write new directory block");
+                //log(LOG_ERROR, "Failed to write new directory block");
                 rfss_free_block(fs, new_block);
                 return -1;
             }
             
             if (rfss_write_inode(fs, dir_inode, inode) != 0) {
-                log(LOG_ERROR, "Failed to update directory inode");
+                //log(LOG_ERROR, "Failed to update directory inode");
                 rfss_free_block(fs, new_block);
                 return -1;
             }
@@ -238,19 +242,19 @@ static int rfss_add_directory_entry(rfss_fs_t* fs, uint32_t dir_inode, const cha
         }
     }
     
-    log(LOG_ERROR, "Directory is full, no more direct blocks available");
+    //log(LOG_ERROR, "Directory is full, no more direct blocks available");
     return -1;
 }
 
 int rfss_create_file(rfss_fs_t* fs, const char* path, uint32_t mode) {
     if (!fs || !path || !fs->mounted || strlen(path) == 0 || strlen(path) > 255) {
-        log(LOG_ERROR, "Invalid parameters for create file");
+        //log(LOG_ERROR, "Invalid parameters for create file");
         return -1;
     }
     
     char* path_copy = kmalloc(strlen(path) + 1);
     if (!path_copy) {
-        log(LOG_ERROR, "Memory allocation failed");
+        //log(LOG_ERROR, "Memory allocation failed");
         return -1;
     }
     strcpy(path_copy, path);
@@ -269,7 +273,7 @@ int rfss_create_file(rfss_fs_t* fs, const char* path, uint32_t mode) {
     }
     
     if (strlen(filename) == 0 || strlen(filename) >= RFSS_MAX_FILENAME) {
-        log(LOG_ERROR, "Invalid filename");
+        //log(LOG_ERROR, "Invalid filename");
         kfree(path_copy);
         return -1;
     }
@@ -284,21 +288,21 @@ int rfss_create_file(rfss_fs_t* fs, const char* path, uint32_t mode) {
     } else {
         parent_inode = rfss_resolve_path(fs, parent_path_str);
         if (parent_inode == 0) {
-            log(LOG_ERROR, "Parent directory not found");
+            //log(LOG_ERROR, "Parent directory not found");
             kfree(path_copy);
             return -1;
         }
     }
     
     if (rfss_find_file_in_directory(fs, parent_inode, filename) != 0) {
-        log(LOG_ERROR, "File already exists: %s", filename);
+        //log(LOG_ERROR, "File already exists: %s", filename);
         kfree(path_copy);
         return -1;
     }
     
     uint32_t new_inode_num = rfss_allocate_inode(fs);
     if (new_inode_num == 0) {
-        log(LOG_ERROR, "Failed to allocate inode");
+        //log(LOG_ERROR, "Failed to allocate inode");
         kfree(path_copy);
         return -1;
     }
@@ -313,20 +317,20 @@ int rfss_create_file(rfss_fs_t* fs, const char* path, uint32_t mode) {
     new_inode.blocks_count = 0;
     
     if (rfss_write_inode(fs, new_inode_num, &new_inode) != 0) {
-        log(LOG_ERROR, "Failed to write new inode");
+        //log(LOG_ERROR, "Failed to write new inode");
         rfss_free_inode(fs, new_inode_num);
         kfree(path_copy);
         return -1;
     }
     
     if (rfss_add_directory_entry(fs, parent_inode, filename, new_inode_num, RFSS_FILE_REGULAR) != 0) {
-        log(LOG_ERROR, "Failed to add directory entry");
+        //log(LOG_ERROR, "Failed to add directory entry");
         rfss_free_inode(fs, new_inode_num);
         kfree(path_copy);
         return -1;
     }
     
-    //log(LOG_DEBUG, "Created file: %s (inode %d)", path, new_inode_num);
+    log(LOG_DEBUG, "Created file: %s (inode %d)", path, new_inode_num);
     kfree(path_copy);
     return 0;
 }
@@ -347,14 +351,14 @@ uint32_t rfss_calculate_checksum(const void* data, size_t size) {
 
 int rfss_read_block(rfss_fs_t* fs, uint32_t block, void* buffer) {
     if (!buffer) {
-        log(LOG_ERROR, "Invalid buffer for read block");
+        //log(LOG_ERROR, "Invalid buffer for read block");
         return -1;
     }
 
     uint32_t device_id = fs ? fs->device_id : 0;
 
     if (fs && fs->superblock && block >= fs->superblock->total_blocks && block != 0) {
-        log(LOG_ERROR, "Block number out of range: %d >= %d", block, fs->superblock->total_blocks);
+        //log(LOG_ERROR, "Block number out of range: %d >= %d", block, fs->superblock->total_blocks);
         return -1;
     }
 
@@ -363,7 +367,7 @@ int rfss_read_block(rfss_fs_t* fs, uint32_t block, void* buffer) {
 
     for (uint32_t i = 0; i < sectors_per_block; i++) {
         if (ata_read_sectors(device_id, start_sector + i, 1, (uint8_t*)buffer + i * ATA_SECTOR_SIZE) != 0) {
-            log(LOG_ERROR, "Failed to read sector %d", start_sector + i);
+            //log(LOG_ERROR, "Failed to read sector %d", start_sector + i);
             return -1;
         }
     }
@@ -373,14 +377,18 @@ int rfss_read_block(rfss_fs_t* fs, uint32_t block, void* buffer) {
 
 int rfss_write_block(rfss_fs_t* fs, uint32_t block, const void* buffer) {
     if (!buffer) {
-        log(LOG_ERROR, "Invalid buffer for write block");
+        //log(LOG_ERROR, "Invalid buffer for write block");
         return -1;
+    }
+
+    if (fs && fs->journaling_enabled) {
+        return rfss_safe_write_block(fs, block, buffer);
     }
 
     uint32_t device_id = fs ? fs->device_id : 0;
 
     if (fs && fs->superblock && block >= fs->superblock->total_blocks && block != 0) {
-        log(LOG_ERROR, "Block number out of range: %d >= %d", block, fs->superblock->total_blocks);
+        //log(LOG_ERROR, "Block number out of range: %d >= %d", block, fs->superblock->total_blocks);
         return -1;
     }
 
@@ -389,7 +397,7 @@ int rfss_write_block(rfss_fs_t* fs, uint32_t block, const void* buffer) {
 
     for (uint32_t i = 0; i < sectors_per_block; i++) {
         if (ata_write_sectors(device_id, start_sector + i, 1, (const uint8_t*)buffer + i * ATA_SECTOR_SIZE) != 0) {
-            log(LOG_ERROR, "Failed to write sector %d", start_sector + i);
+            //log(LOG_ERROR, "Failed to write sector %d", start_sector + i);
             return -1;
         }
     }
@@ -399,12 +407,12 @@ int rfss_write_block(rfss_fs_t* fs, uint32_t block, const void* buffer) {
 
 uint32_t rfss_allocate_block(rfss_fs_t* fs) {
     if (!fs || !fs->block_bitmap || !fs->superblock) {
-        log(LOG_ERROR, "Filesystem not properly initialized");
+        //log(LOG_ERROR, "Filesystem not properly initialized");
         return 0;
     }
 
     if (fs->superblock->free_blocks == 0) {
-        log(LOG_ERROR, "No free blocks available");
+        //log(LOG_ERROR, "No free blocks available");
         return 0;
     }
 
@@ -420,7 +428,7 @@ uint32_t rfss_allocate_block(rfss_fs_t* fs) {
         }
     }
 
-    log(LOG_ERROR, "No free blocks available");
+    //log(LOG_ERROR, "No free blocks available");
     return 0;
 }
 
@@ -440,12 +448,12 @@ void rfss_free_block(rfss_fs_t* fs, uint32_t block) {
 
 uint32_t rfss_allocate_inode(rfss_fs_t* fs) {
     if (!fs || !fs->inode_bitmap || !fs->superblock) {
-        log(LOG_ERROR, "Filesystem not properly initialized");
+        //log(LOG_ERROR, "Filesystem not properly initialized");
         return 0;
     }
 
     if (fs->superblock->free_inode_count == 0) {
-        log(LOG_ERROR, "No free inodes available");
+        //log(LOG_ERROR, "No free inodes available");
         return 0;
     }
 
@@ -461,7 +469,7 @@ uint32_t rfss_allocate_inode(rfss_fs_t* fs) {
         }
     }
 
-    log(LOG_ERROR, "No free inodes available");
+    //log(LOG_ERROR, "No free inodes available");
     return 0;
 }
 
@@ -482,12 +490,12 @@ void rfss_free_inode(rfss_fs_t* fs, uint32_t inode) {
 int rfss_format(uint32_t device_id, const char* label) {
     //log(LOG_DEBUG, "rfss_format: device_id=%d, label='%s'", device_id, label ? label : "unlabeled");
     if (label && strlen(label) >= 16) {
-        log(LOG_ERROR, "Label too long (max 15 characters)");
+        //log(LOG_ERROR, "Label too long (max 15 characters)");
         return -1;
     }
 
     if (!ata_drive_exists(device_id)) {
-        log(LOG_ERROR, "Drive %d does not exist", device_id);
+        //log(LOG_ERROR, "Drive %d does not exist", device_id);
         return -1;
     }
 
@@ -497,7 +505,7 @@ int rfss_format(uint32_t device_id, const char* label) {
     uint32_t total_blocks = total_sectors / sectors_per_block;
 
     if (total_blocks < 81) {
-        log(LOG_ERROR, "Drive too small for filesystem (need at least 81 blocks)");
+        //log(LOG_ERROR, "Drive too small for filesystem (need at least 81 blocks)");
         return -1;
     }
 
@@ -515,7 +523,7 @@ int rfss_format(uint32_t device_id, const char* label) {
     superblock.root_inode = 1;
     superblock.bitmap_block = 69;
     superblock.journal_block = 71;
-    superblock.journal_size = 8;
+    superblock.journal_size = 0;
     superblock.created_time = 0;
     superblock.modified_time = 0;
     superblock.mount_count = 0;
@@ -533,7 +541,7 @@ int rfss_format(uint32_t device_id, const char* label) {
     //log(LOG_DEBUG, "Superblock: magic=0x%x, total_blocks=%d, free_blocks=%d", superblock.magic, superblock.total_blocks, superblock.free_blocks);
 
     if (rfss_write_block(NULL, 0, &superblock) != 0) {
-        log(LOG_ERROR, "Failed to write superblock");
+        //log(LOG_ERROR, "Failed to write superblock");
         return -1;
     }
 
@@ -542,7 +550,7 @@ int rfss_format(uint32_t device_id, const char* label) {
     //log(LOG_DEBUG, "bitmap_size=%d", bitmap_size);
     uint8_t* block_bitmap = kmalloc(RFSS_BLOCK_SIZE);
     if (!block_bitmap) {
-        log(LOG_ERROR, "Failed to allocate block bitmap");
+        //log(LOG_ERROR, "Failed to allocate block bitmap");
         return -1;
     }
     memset(block_bitmap, 0, RFSS_BLOCK_SIZE);
@@ -556,14 +564,14 @@ int rfss_format(uint32_t device_id, const char* label) {
     }
 
     if (rfss_write_block(NULL, superblock.bitmap_block, block_bitmap) != 0) {
-        log(LOG_ERROR, "Failed to write block bitmap");
+        //log(LOG_ERROR, "Failed to write block bitmap");
         kfree(block_bitmap);
         return -1;
     }
 
     uint8_t* inode_bitmap = kmalloc(RFSS_BLOCK_SIZE);
     if (!inode_bitmap) {
-        log(LOG_ERROR, "Failed to allocate inode bitmap");
+        //log(LOG_ERROR, "Failed to allocate inode bitmap");
         kfree(block_bitmap);
         return -1;
     }
@@ -572,7 +580,7 @@ int rfss_format(uint32_t device_id, const char* label) {
 
     uint32_t inode_bitmap_block = superblock.bitmap_block + 1;
     if (rfss_write_block(NULL, inode_bitmap_block, inode_bitmap) != 0) {
-        log(LOG_ERROR, "Failed to write inode bitmap");
+        //log(LOG_ERROR, "Failed to write inode bitmap");
         kfree(block_bitmap);
         kfree(inode_bitmap);
         return -1;
@@ -583,7 +591,7 @@ int rfss_format(uint32_t device_id, const char* label) {
     uint32_t inode_blocks = (superblock.inode_count + inodes_per_block - 1) / inodes_per_block;
     rfss_inode_t* inode_table = kmalloc(inode_blocks * RFSS_BLOCK_SIZE);
     if (!inode_table) {
-        log(LOG_ERROR, "Failed to allocate inode table");
+        //log(LOG_ERROR, "Failed to allocate inode table");
         kfree(block_bitmap);
         kfree(inode_bitmap);
         return -1;
@@ -628,7 +636,7 @@ int rfss_format(uint32_t device_id, const char* label) {
     memset(&dotdot_entry->name[2], 0, RFSS_MAX_FILENAME - 2);
 
     if (rfss_write_block(NULL, 79, root_block) != 0) {
-        log(LOG_ERROR, "Failed to write root directory block");
+        //log(LOG_ERROR, "Failed to write root directory block");
         kfree(block_bitmap);
         kfree(inode_bitmap);
         kfree(inode_table);
@@ -645,12 +653,12 @@ int rfss_format(uint32_t device_id, const char* label) {
 
 int rfss_mount(uint32_t device_id, rfss_fs_t* fs) {
     if (!fs || mounted_fs) {
-        log(LOG_ERROR, "Invalid mount parameters or filesystem already mounted");
+        //log(LOG_ERROR, "Invalid mount parameters or filesystem already mounted");
         return -1;
     }
 
     if (!ata_drive_exists(device_id)) {
-        log(LOG_ERROR, "Drive %d does not exist", device_id);
+        //log(LOG_ERROR, "Drive %d does not exist", device_id);
         return -1;
     }
 
@@ -658,25 +666,25 @@ int rfss_mount(uint32_t device_id, rfss_fs_t* fs) {
 
     fs->superblock = kmalloc(sizeof(rfss_superblock_t));
     if (!fs->superblock) {
-        log(LOG_ERROR, "Failed to allocate superblock");
+        //log(LOG_ERROR, "Failed to allocate superblock");
         return -1;
     }
     memset(fs->superblock, 0, sizeof(rfss_superblock_t));
 
     if (rfss_read_block(fs, 0, fs->superblock) != 0) {
-        log(LOG_ERROR, "Failed to read superblock");
+        //log(LOG_ERROR, "Failed to read superblock");
         kfree(fs->superblock);
         return -1;
     }
 
     if (fs->superblock->magic != RFSS_MAGIC) {
-        log(LOG_ERROR, "Invalid filesystem magic: 0x%x", fs->superblock->magic);
+        //log(LOG_ERROR, "Invalid filesystem magic: 0x%x", fs->superblock->magic);
         kfree(fs->superblock);
         return -1;
     }
 
     if (fs->superblock->version != RFSS_VERSION) {
-        log(LOG_ERROR, "Unsupported filesystem version: %d", fs->superblock->version);
+        //log(LOG_ERROR, "Unsupported filesystem version: %d", fs->superblock->version);
         kfree(fs->superblock);
         return -1;
     }
@@ -687,13 +695,13 @@ int rfss_mount(uint32_t device_id, rfss_fs_t* fs) {
     }
     fs->block_bitmap = kmalloc(RFSS_BLOCK_SIZE);
     if (!fs->block_bitmap) {
-        log(LOG_ERROR, "Failed to allocate block bitmap");
+        //log(LOG_ERROR, "Failed to allocate block bitmap");
         kfree(fs->superblock);
         return -1;
     }
 
     if (rfss_read_block(fs, fs->superblock->bitmap_block, fs->block_bitmap) != 0) {
-        log(LOG_ERROR, "Failed to read block bitmap");
+        //log(LOG_ERROR, "Failed to read block bitmap");
         kfree(fs->superblock);
         kfree(fs->block_bitmap);
         return -1;
@@ -705,14 +713,14 @@ int rfss_mount(uint32_t device_id, rfss_fs_t* fs) {
     }
     fs->inode_bitmap = kmalloc(RFSS_BLOCK_SIZE);
     if (!fs->inode_bitmap) {
-        log(LOG_ERROR, "Failed to allocate inode bitmap");
+        //log(LOG_ERROR, "Failed to allocate inode bitmap");
         kfree(fs->superblock);
         kfree(fs->block_bitmap);
         return -1;
     }
 
     if (rfss_read_block(fs, fs->superblock->bitmap_block + 1, fs->inode_bitmap) != 0) {
-        log(LOG_ERROR, "Failed to read inode bitmap");
+        //log(LOG_ERROR, "Failed to read inode bitmap");
         kfree(fs->superblock);
         kfree(fs->block_bitmap);
         kfree(fs->inode_bitmap);
@@ -723,7 +731,7 @@ int rfss_mount(uint32_t device_id, rfss_fs_t* fs) {
     uint32_t inode_blocks = (fs->superblock->inode_count + inodes_per_block - 1) / inodes_per_block;
     fs->inode_table = kmalloc(inode_blocks * RFSS_BLOCK_SIZE);
     if (!fs->inode_table) {
-        log(LOG_ERROR, "Failed to allocate inode table");
+        //log(LOG_ERROR, "Failed to allocate inode table");
         kfree(fs->superblock);
         kfree(fs->block_bitmap);
         kfree(fs->inode_bitmap);
@@ -732,7 +740,7 @@ int rfss_mount(uint32_t device_id, rfss_fs_t* fs) {
 
     for (uint32_t i = 0; i < inode_blocks; i++) {
         if (rfss_read_block(fs, fs->superblock->inode_table_block + i, (uint8_t*)fs->inode_table + i * RFSS_BLOCK_SIZE) != 0) {
-            log(LOG_ERROR, "Failed to read inode table block %d", i);
+            //log(LOG_ERROR, "Failed to read inode table block %d", i);
             kfree(fs->superblock);
             kfree(fs->block_bitmap);
             kfree(fs->inode_bitmap);
@@ -746,6 +754,10 @@ int rfss_mount(uint32_t device_id, rfss_fs_t* fs) {
     fs->device_id = device_id;
     fs->mounted = 1;
     fs->dirty = 0;
+    fs->journaling_enabled = (fs->superblock->journal_size > 0);
+    if (fs->journaling_enabled) {
+        rfss_journal_init(fs);
+    }
 
     mounted_fs = fs;
 
@@ -760,22 +772,22 @@ int rfss_unmount(rfss_fs_t* fs) {
 
     if (fs->dirty) {
         if (rfss_write_block(fs, 0, fs->superblock) != 0) {
-            log(LOG_ERROR, "Failed to write back superblock");
+            //log(LOG_ERROR, "Failed to write back superblock");
         }
 
         if (rfss_write_block(fs, fs->superblock->bitmap_block, fs->block_bitmap) != 0) {
-            log(LOG_ERROR, "Failed to write back block bitmap");
+            //log(LOG_ERROR, "Failed to write back block bitmap");
         }
 
         if (rfss_write_block(fs, fs->superblock->bitmap_block + 1, fs->inode_bitmap) != 0) {
-            log(LOG_ERROR, "Failed to write back inode bitmap");
+            //log(LOG_ERROR, "Failed to write back inode bitmap");
         }
 
         uint32_t inodes_per_block = RFSS_BLOCK_SIZE / sizeof(rfss_inode_t);
         uint32_t inode_blocks = (fs->superblock->inode_count + inodes_per_block - 1) / inodes_per_block;
         for (uint32_t i = 0; i < inode_blocks; i++) {
             if (rfss_write_block(fs, fs->superblock->inode_table_block + i, (uint8_t*)fs->inode_table + i * RFSS_BLOCK_SIZE) != 0) {
-                log(LOG_ERROR, "Failed to write back inode table block %d", i);
+                //log(LOG_ERROR, "Failed to write back inode table block %d", i);
             }
         }
     }
@@ -799,7 +811,7 @@ int rfss_delete_file(rfss_fs_t* fs, const char* path) {
 
     uint32_t inode_num = rfss_resolve_path(fs, path);
     if (inode_num == 0) {
-        log(LOG_ERROR, "File not found: %s", path);
+        //log(LOG_ERROR, "File not found: %s", path);
         return -1;
     }
 
@@ -809,7 +821,7 @@ int rfss_delete_file(rfss_fs_t* fs, const char* path) {
     }
 
     if (((inode->mode >> 12) & 0xF) == RFSS_FILE_DIRECTORY) {
-        log(LOG_ERROR, "Cannot delete directory with delete_file");
+        //log(LOG_ERROR, "Cannot delete directory with delete_file");
         return -1;
     }
 
@@ -836,7 +848,30 @@ int rfss_delete_file(rfss_fs_t* fs, const char* path) {
 
     uint32_t parent_inode = rfss_resolve_path(fs, path_copy);
     if (parent_inode != 0) {
-        
+        rfss_inode_t* parent_inode_ptr = rfss_get_inode(fs, parent_inode);
+        if (parent_inode_ptr) {
+            static uint8_t block_buffer[RFSS_BLOCK_SIZE];
+            for (int i = 0; i < RFSS_DIRECT_BLOCKS && parent_inode_ptr->direct_blocks[i]; i++) {
+                if (rfss_read_block(fs, parent_inode_ptr->direct_blocks[i], block_buffer) != 0) {
+                    continue;
+                }
+                uint32_t offset = 0;
+                while (offset < RFSS_BLOCK_SIZE) {
+                    rfss_dir_entry_t* entry = (rfss_dir_entry_t*)(block_buffer + offset);
+                    if (entry->rec_len == 0 || entry->rec_len > RFSS_BLOCK_SIZE - offset ||
+                        entry->rec_len < sizeof(rfss_dir_entry_t)) {
+                        break;
+                    }
+                    if (entry->inode == inode_num && entry->name_len == strlen(filename) &&
+                        memcmp(entry->name, filename, entry->name_len) == 0) {
+                        entry->inode = 0;
+                        rfss_write_block(fs, parent_inode_ptr->direct_blocks[i], block_buffer);
+                        break;
+                    }
+                    offset += entry->rec_len;
+                }
+            }
+        }
     }
 
     kfree(path_copy);
@@ -850,7 +885,7 @@ int rfss_remove_directory(rfss_fs_t* fs, const char* path) {
 
     uint32_t inode_num = rfss_resolve_path(fs, path);
     if (inode_num == 0) {
-        log(LOG_ERROR, "Directory not found: %s", path);
+        //log(LOG_ERROR, "Directory not found: %s", path);
         return -1;
     }
 
@@ -873,7 +908,7 @@ int rfss_remove_directory(rfss_fs_t* fs, const char* path) {
             if (entry->inode != 0 && entry->name_len > 0 &&
                 !(entry->name_len == 1 && entry->name[0] == '.') &&
                 !(entry->name_len == 2 && entry->name[0] == '.' && entry->name[1] == '.')) {
-                log(LOG_ERROR, "Directory not empty");
+                //log(LOG_ERROR, "Directory not empty");
                 return -1;
             }
 
@@ -904,7 +939,30 @@ int rfss_remove_directory(rfss_fs_t* fs, const char* path) {
 
     uint32_t parent_inode = rfss_resolve_path(fs, path_copy);
     if (parent_inode != 0) {
-        
+        rfss_inode_t* parent_inode_ptr = rfss_get_inode(fs, parent_inode);
+        if (parent_inode_ptr) {
+            static uint8_t block_buffer[RFSS_BLOCK_SIZE];
+            for (int i = 0; i < RFSS_DIRECT_BLOCKS && parent_inode_ptr->direct_blocks[i]; i++) {
+                if (rfss_read_block(fs, parent_inode_ptr->direct_blocks[i], block_buffer) != 0) {
+                    continue;
+                }
+                uint32_t offset = 0;
+                while (offset < RFSS_BLOCK_SIZE) {
+                    rfss_dir_entry_t* entry = (rfss_dir_entry_t*)(block_buffer + offset);
+                    if (entry->rec_len == 0 || entry->rec_len > RFSS_BLOCK_SIZE - offset ||
+                        entry->rec_len < sizeof(rfss_dir_entry_t)) {
+                        break;
+                    }
+                    if (entry->inode == inode_num && entry->name_len == strlen(dirname) &&
+                        memcmp(entry->name, dirname, entry->name_len) == 0) {
+                        entry->inode = 0;
+                        rfss_write_block(fs, parent_inode_ptr->direct_blocks[i], block_buffer);
+                        break;
+                    }
+                    offset += entry->rec_len;
+                }
+            }
+        }
     }
 
     kfree(path_copy);
@@ -930,12 +988,12 @@ int rfss_check_filesystem(rfss_fs_t* fs) {
     }
 
     if (fs->superblock->magic != RFSS_MAGIC) {
-        log(LOG_ERROR, "Invalid magic number");
+        //log(LOG_ERROR, "Invalid magic number");
         return -1;
     }
 
     if (fs->superblock->version != RFSS_VERSION) {
-        log(LOG_ERROR, "Unsupported version");
+        //log(LOG_ERROR, "Unsupported version");
         return -1;
     }
 
@@ -948,13 +1006,13 @@ rfss_fs_t* rfss_get_mounted_fs(void) {
 
 int rfss_create_directory(rfss_fs_t* fs, const char* path) {
     if (!fs || !path || !fs->mounted || strlen(path) == 0 || strlen(path) > 255) {
-        log(LOG_ERROR, "Invalid parameters for create directory");
+        //log(LOG_ERROR, "Invalid parameters for create directory");
         return -1;
     }
     
     char* path_copy = kmalloc(strlen(path) + 1);
     if (!path_copy) {
-        log(LOG_ERROR, "Memory allocation failed");
+        //log(LOG_ERROR, "Memory allocation failed");
         return -1;
     }
     strcpy(path_copy, path);
@@ -973,7 +1031,7 @@ int rfss_create_directory(rfss_fs_t* fs, const char* path) {
     }
     
     if (strlen(dirname) == 0 || strlen(dirname) >= RFSS_MAX_FILENAME) {
-        log(LOG_ERROR, "Invalid directory name");
+        //log(LOG_ERROR, "Invalid directory name");
         kfree(path_copy);
         return -1;
     }
@@ -988,28 +1046,28 @@ int rfss_create_directory(rfss_fs_t* fs, const char* path) {
     } else {
         parent_inode = rfss_resolve_path(fs, parent_path_str);
         if (parent_inode == 0) {
-            log(LOG_ERROR, "Parent directory not found");
+            //log(LOG_ERROR, "Parent directory not found");
             kfree(path_copy);
             return -1;
         }
     }
     
     if (rfss_find_file_in_directory(fs, parent_inode, dirname) != 0) {
-        log(LOG_ERROR, "Directory already exists: %s", dirname);
+        //log(LOG_ERROR, "Directory already exists: %s", dirname);
         kfree(path_copy);
         return -1;
     }
     
     uint32_t new_inode_num = rfss_allocate_inode(fs);
     if (new_inode_num == 0) {
-        log(LOG_ERROR, "Failed to allocate inode for directory");
+        //log(LOG_ERROR, "Failed to allocate inode for directory");
         kfree(path_copy);
         return -1;
     }
     
     uint32_t dir_block = rfss_allocate_block(fs);
     if (dir_block == 0) {
-        log(LOG_ERROR, "Failed to allocate block for directory");
+        //log(LOG_ERROR, "Failed to allocate block for directory");
         rfss_free_inode(fs, new_inode_num);
         kfree(path_copy);
         return -1;
@@ -1048,7 +1106,7 @@ int rfss_create_directory(rfss_fs_t* fs, const char* path) {
     memset(&dotdot_entry->name[2], 0, RFSS_MAX_FILENAME - 2);
     
     if (rfss_write_block(fs, dir_block, block_buffer) != 0) {
-        log(LOG_ERROR, "Failed to write directory block");
+        //log(LOG_ERROR, "Failed to write directory block");
         rfss_free_block(fs, dir_block);
         rfss_free_inode(fs, new_inode_num);
         kfree(path_copy);
@@ -1056,7 +1114,7 @@ int rfss_create_directory(rfss_fs_t* fs, const char* path) {
     }
     
     if (rfss_write_inode(fs, new_inode_num, &new_inode) != 0) {
-        log(LOG_ERROR, "Failed to write directory inode");
+        //log(LOG_ERROR, "Failed to write directory inode");
         rfss_free_block(fs, dir_block);
         rfss_free_inode(fs, new_inode_num);
         kfree(path_copy);
@@ -1064,7 +1122,7 @@ int rfss_create_directory(rfss_fs_t* fs, const char* path) {
     }
     
     if (rfss_add_directory_entry(fs, parent_inode, dirname, new_inode_num, RFSS_FILE_DIRECTORY) != 0) {
-        log(LOG_ERROR, "Failed to add directory entry to parent");
+        //log(LOG_ERROR, "Failed to add directory entry to parent");
         rfss_free_block(fs, dir_block);
         rfss_free_inode(fs, new_inode_num);
         kfree(path_copy);
@@ -1078,25 +1136,25 @@ int rfss_create_directory(rfss_fs_t* fs, const char* path) {
 
 int rfss_open_file(rfss_fs_t* fs, const char* path, int flags, rfss_file_t* file) {
     if (!fs || !path || !file || !fs->mounted) {
-        log(LOG_ERROR, "Invalid parameters for open file");
+        //log(LOG_ERROR, "Invalid parameters for open file");
         return -1;
     }
     
     uint32_t inode_num = rfss_resolve_path(fs, path);
     if (inode_num == 0) {
-        log(LOG_ERROR, "File not found: %s", path);
+        //log(LOG_ERROR, "File not found: %s", path);
         return -1;
     }
     
     rfss_inode_t* inode = rfss_get_inode(fs, inode_num);
     if (!inode) {
-        log(LOG_ERROR, "Failed to get inode %d", inode_num);
+        //log(LOG_ERROR, "Failed to get inode %d", inode_num);
         return -1;
     }
     
     file->inode = kmalloc(sizeof(rfss_inode_t));
     if (!file->inode) {
-        log(LOG_ERROR, "Memory allocation failed for file inode");
+        //log(LOG_ERROR, "Memory allocation failed for file inode");
         return -1;
     }
     
@@ -1105,6 +1163,17 @@ int rfss_open_file(rfss_fs_t* fs, const char* path, int flags, rfss_file_t* file
     file->position = 0;
     file->flags = flags;
     file->fs = fs;
+
+    // Truncate file if opened for writing
+    if (flags & 1) {
+        for (int i = 0; i < RFSS_DIRECT_BLOCKS && file->inode->direct_blocks[i]; i++) {
+            rfss_free_block(fs, file->inode->direct_blocks[i]);
+            file->inode->direct_blocks[i] = 0;
+        }
+        file->inode->size = 0;
+        file->inode->blocks_count = 0;
+        rfss_write_inode(fs, inode_num, file->inode);
+    }
     
     //log(LOG_DEBUG, "Opened file: %s (inode %d)", path, inode_num);
     return 0;
@@ -1289,6 +1358,38 @@ int rfss_list_directory(rfss_fs_t* fs, const char* path, rfss_dir_entry_t** entr
     }
     
     if (*count == 0) {
+        return 0;
+    }
+    
+    int rfss_enable_journaling(rfss_fs_t* fs) {
+        if (!fs || !fs->mounted) {
+            return -1;
+        }
+    
+        if (fs->superblock->journal_size == 0) {
+            //log(LOG_ERROR, "Journal not configured in superblock");
+            return -1;
+        }
+    
+        if (!fs->journaling_enabled) {
+            fs->journaling_enabled = 1;
+            rfss_journal_init(fs);
+            log(LOG_OK, "Journaling enabled");
+        }
+    
+        return 0;
+    }
+    
+    int rfss_disable_journaling(rfss_fs_t* fs) {
+        if (!fs || !fs->mounted) {
+            return -1;
+        }
+    
+        if (fs->journaling_enabled) {
+            fs->journaling_enabled = 0;
+            log(LOG_OK, "Journaling disabled");
+        }
+    
         return 0;
     }
     

@@ -91,3 +91,12 @@ mouse_state_t get_mouse_state(void) {
 void mouse_set_callback(void (*callback)(mouse_state_t state)) {
     mouse_callback = callback;
 }
+
+void mouse_update(int8_t dx, int8_t dy, uint8_t buttons) {
+    mouse_state.x += dx;
+    mouse_state.y -= dy;
+    if (mouse_state.x < 0) mouse_state.x = 0;
+    if (mouse_state.y < 0) mouse_state.y = 0;
+    mouse_state.buttons = buttons;
+    if (mouse_callback) mouse_callback(mouse_state);
+}

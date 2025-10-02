@@ -21,4 +21,6 @@ void draw_char(uint32_t x, uint32_t y, char c, uint32_t color);
 void prints(uint32_t x, uint32_t y, const char* str, uint32_t color);
 void screen_scroll(uint32_t bg_color);
 
+extern screen_t screen;
+
 #endif

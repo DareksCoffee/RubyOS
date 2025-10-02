@@ -1,6 +1,6 @@
 #include "rfss.h"
 #include "../drivers/ata.h"
-#include "../kernel/memory.h"
+#include "../mm/memory.h"
 #include "../kernel/logger.h"
 #include <string.h>
 

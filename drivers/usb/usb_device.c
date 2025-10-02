@@ -4,6 +4,7 @@
 #include <logger.h>
 #include <../drivers/time/pit.h>
 #include <../drivers/usb/hid/keyboard.h>
+#include <../drivers/usb/hid/mouse.h>
 #include <string.h>
 
 static usb_device_list_t device_list;
@@ -93,6 +94,9 @@ uint8_t usb_enumerate_device(uint8_t port) {
             if (iface.interface_subclass == USB_SUBCLASS_BOOT &&
                 iface.interface_protocol == USB_PROTOCOL_KEYBOARD) {
                 device->is_keyboard = 1;
+            } else if (iface.interface_subclass == USB_SUBCLASS_BOOT &&
+                       iface.interface_protocol == USB_PROTOCOL_MOUSE) {
+                device->is_mouse = 1;
             }
         }
     }

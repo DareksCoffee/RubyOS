@@ -11,18 +11,21 @@
 #include <../drivers/keyboard/keyboard.h>
 #include <../drivers/mouse/mouse.h>
 #include <../drivers/usb/hid/keyboard.h>
+#include <../drivers/usb/hid/mouse.h>
 #include <../user/shell/shell.h>
 #include <../drivers/time/pit.h>
+#include <../drivers/screen.h>
 #include <../cpu/syscall_handler.h>
 #include <../libc/syscall.h>
 #include <../drivers/usb/usb.h>
+#include <../drivers/net/ethernet/rtl8139.h>
+#include <../drivers/net/dns.h>
 #include <../drivers/ata.h>
-#include "memory.h"
+#include "../mm/memory.h"
+#include "process.h"
 
 static void timer_callback(registers_t* regs __attribute__((unused))) {
-    /*
-        Empty for now
-    */
+    schedule();
 }
 
 void kmain(multiboot_info_t* mbd, unsigned int magic __attribute__((unused))) {
@@ -33,6 +36,10 @@ void kmain(multiboot_info_t* mbd, unsigned int magic __attribute__((unused))) {
     log(LOG_SYSTEM, "Initializing memory management...");
     init_memory_manager(mbd);
     log(LOG_OK, "Memory management initialized");
+
+    log(LOG_SYSTEM, "Initializing processes...");
+    init_processes();
+    log(LOG_OK, "Processes initialized");
 
     log(LOG_SYSTEM, "Detecting system memory...");
     detect_memory(mbd);
@@ -63,6 +70,16 @@ void kmain(multiboot_info_t* mbd, unsigned int magic __attribute__((unused))) {
     init_syscalls();
     log(LOG_OK, "Syscalls initialized.");
     
+
+    log(LOG_OK, "Initializing RTL8139 Ethernet chip driver.");
+    rtl8139_setup();
+
+    log(LOG_SYSTEM, "Initializing DNS...");
+    dns_init();
+    log(LOG_OK, "DNS initialized");
+
+    if(rtl8139_linkup() == RTL_YES) log(LOG_OK, "Connected to the internet.");
+    else log(LOG_ERROR, "Not connected to the internet.");
     log(LOG_SYSTEM, "Initializing PIT...");
     pit_init(100);
     log(LOG_OK, "PIT initialized running in 100Hz.");
@@ -79,6 +96,9 @@ void kmain(multiboot_info_t* mbd, unsigned int magic __attribute__((unused))) {
     log(LOG_SYSTEM, "Initializing mouse...");
     init_mouse();
 
+    log(LOG_SYSTEM, "Initializing usb mouse...");
+    usb_mouse_init();
+    
     log(LOG_SYSTEM, "Initializing shell...");
     init_shell();
 

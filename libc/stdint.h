@@ -34,6 +34,7 @@ typedef uint32_t uint_fast16_t;
 typedef uint32_t uint_fast32_t;
 typedef uint64_t uint_fast64_t;
 
+
 // Pointer-sized integer types
 typedef unsigned int uintptr_t;
 typedef int          intptr_t;

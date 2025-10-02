@@ -29,6 +29,7 @@ typedef struct usb_device {
     usb_endpoint_t endpoints[USB_MAX_ENDPOINTS];
     uint8_t num_endpoints;
     uint8_t is_keyboard;
+    uint8_t is_mouse;
     uint8_t status;
 } usb_device_t;
 
@@ -50,5 +51,6 @@ uint8_t usb_set_configuration(uint8_t device_addr, uint8_t config);
 #define USB_CLASS_HID 0x03
 #define USB_SUBCLASS_BOOT 0x01
 #define USB_PROTOCOL_KEYBOARD 0x01
+#define USB_PROTOCOL_MOUSE 0x02
 
 #endif

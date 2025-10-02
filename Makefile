@@ -8,12 +8,12 @@ GRUB_MKRESCUE = grub-mkrescue
 
 # Flags
 ASMFLAGS = -f elf32
-CFLAGS = -m32 -ffreestanding -c -g -Wall -Wextra -Idrivers -Ilibc -Ikernel -Icpu -Iuser -Ifs -fno-stack-protector
+CFLAGS = -m32 -ffreestanding -c -g -Wall -Wextra -Idrivers -Ilibc -Ikernel -Icpu -lutils -Iuser -Ifs -Imm -fno-stack-protector
 LDFLAGS = -m elf_i386 -T linker.ld
 GRUB_FLAGS = -o bin/rubyos.iso build/isofiles
 
 # Files
-C_SOURCES = $(shell find kernel drivers libc cpu user fs ui -name '*.c')
+C_SOURCES = $(shell find kernel drivers libc cpu user utils fs ui startup mm -name '*.c')
 ASM_SOURCES = $(shell find boot cpu -name '*.s')
 C_OBJECTS = $(patsubst %.c, build/%.o, $(C_SOURCES))
 ASM_OBJECTS = $(patsubst %.s, build/%_asm.o, $(ASM_SOURCES))
@@ -49,10 +49,10 @@ clean:
 	rm -rf build bin
 
 run: iso
-	qemu-system-x86_64 -cdrom bin/rubyos.iso -hda disk.img -m 512M
+	qemu-system-x86_64 -cdrom bin/rubyos.iso -hda disk.img -m 512M -device usb-ehci,id=ehci
 
 disk:
 	qemu-img create -f raw disk.img 256M
 
 run-with-disk: iso disk
-	qemu-system-x86_64 -cdrom bin/rubyos.iso -hda disk.img -m 512M
+	qemu-system-x86_64 -cdrom bin/rubyos.iso -hda disk.img -m 512M -device usb-ehci,id=ehci 

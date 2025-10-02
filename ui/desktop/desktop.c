@@ -2,6 +2,7 @@
 #include "../drivers/screen.h"
 #include "../drivers/keyboard/keyboard.h"
 #include "../drivers/mouse/mouse.h"
+#include <stdint.h>
 
 static desktop_element_t elements[3];
 static int desktop_running = 1;
@@ -29,6 +30,10 @@ void init_desktop(void) {
     elements[0] = (desktop_element_t){50, 50, 200, 150, 0x00FF0000};
     elements[1] = (desktop_element_t){300, 100, 150, 100, 0x0000FF00};
     elements[2] = (desktop_element_t){100, 250, 250, 80, 0x000000FF};
+    // Draw task bar
+    uint32_t taskbar_height = 50;
+    draw_rect(0, screen.height - taskbar_height, screen.width, taskbar_height, 0x00888888);
+    prints(10, screen.height - taskbar_height + 10, "RubyOS Desktop", 0x00FFFFFF);
     init_cursor();
     keyboard_set_special_callback(desktop_special_key);
     mouse_set_callback(desktop_mouse_callback);

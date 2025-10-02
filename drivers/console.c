@@ -1,13 +1,46 @@
+#include "../drivers/time/pit.h"
 #include "console.h"
 #include "screen.h"
+#include "../kernel/bg.h"
+#include "../mm/memory.h"
 
 static console_t console;
+static uint32_t* bg_pixels = NULL;
+
+static void draw_background(void) {
+    if (!bg_pixels) {
+        bg_pixels = kmalloc(width * height * 4);
+        if (!bg_pixels) return;
+        char* data = header_data;
+        for (int p = 0; p < width * height; ) {
+            unsigned char pixel[3];
+            HEADER_PIXEL(data, pixel);
+            bg_pixels[p++] = 0xFF000000 | (pixel[2] << 16) | (pixel[1] << 8) | pixel[0];
+            if (p < width * height) {
+                HEADER_PIXEL(data, pixel);
+                bg_pixels[p++] = 0xFF000000 | (pixel[2] << 16) | (pixel[1] << 8) | pixel[0];
+            }
+            if (p < width * height) {
+                HEADER_PIXEL(data, pixel);
+                bg_pixels[p++] = 0xFF000000 | (pixel[2] << 16) | (pixel[1] << 8) | pixel[0];
+            }
+        }
+    }
+    for (uint32_t y = 0; y < screen.height; y++) {
+        for (uint32_t x = 0; x < screen.width; x++) {
+            uint32_t x_img = (x * width) / screen.width;
+            uint32_t y_img = (y * height) / screen.height;
+            uint32_t color = bg_pixels[y_img * width + x_img];
+            set_pixel(x, y, color);
+        }
+    }
+}
 
 void console_init(void) {
     console.x = 0;
     console.y = 0;
-    console.max_x = 1920 / 8;
-    console.max_y = 1080 / 16;
+    console.max_x = screen.width / 8;
+    console.max_y = screen.height / 16;
     console.color = 0x00FFFFFF;
     console.bg_color = 0x00000000;
     console_clear();
@@ -60,6 +93,26 @@ void console_puts(const char* str) {
     while (*str) {
         console_putchar(*str);
         str++;
+    }
+}
+
+void console_draw_rect(uint32_t width, uint32_t height, uint32_t color, int newline) {
+    draw_rect(console.x * 8, console.y * 16, width * 8, height * 16, color);
+    if (newline) {
+        console.x = 0;
+        console.y += height;
+        if (console.y >= console.max_y) {
+            console_scroll();
+        }
+    } else {
+        console.x += width;
+        if (console.x >= console.max_x) {
+            console.x = 0;
+            console.y++;
+            if (console.y >= console.max_y) {
+                console_scroll();
+            }
+        }
     }
 }
 
@@ -312,6 +365,26 @@ void console_print_kv_int(const char* key, int value, int key_width, int value_w
     str[j] = '\0';
 
     console_print_kv(key, str, key_width, value_width);
+}
+void console_print_animated(const char* str, uint32_t* colors, int num_colors, int interval_ms) {
+    int len = 0;
+    while (str[len]) len++;
+    for (int offset = -len; offset <= 0; offset++) {
+        console_set_cursor(0, console.y);
+        for (int i = 0; i < console.max_x; i++) {
+            int char_index = i - offset;
+            if (char_index >= 0 && char_index < len) {
+                console_set_color(colors[char_index % num_colors], 0x00000000);
+                console_putchar(str[char_index]);
+            } else {
+                console_set_color(0x00FFFFFF, 0x00000000);
+                console_putchar(' ');
+            }
+        }
+        uint64_t start_ticks = pit_ticks();
+        while (pit_ticks() - start_ticks < (interval_ms / 10));
+    }
+    console_set_cursor(0, console.y + 1);
 }
 
 

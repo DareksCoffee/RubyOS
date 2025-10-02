@@ -2,6 +2,7 @@
 #include "../kernel/logger.h"
 #include "string.h"
 #include <stdarg.h>
+#include "syscall.h"
 
 void cmd_init(void) {
     console_init();
@@ -54,4 +55,10 @@ int sscanf(const char* str, const char* format, ...) {
     
     va_end(args);
     return count;
+}
+
+int getchar(void) {
+    char c;
+    read(&c, 1);
+    return c;
 }
