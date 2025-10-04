@@ -17,7 +17,7 @@ align 4
     dd 32       ; depth
 
 global start
-extern kmain
+extern start_kernel
 
 section .text
 start:
@@ -28,7 +28,7 @@ start:
     push eax    ; multiboot magic number
     push ebx    ; multiboot info structure pointer
     
-    call kmain
+    call start_kernel
     
 .hang:
     hlt
